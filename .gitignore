@@ -1,0 +1,13 @@
+# Dependencias
+node_modules/
+
+# Cache y archivos de compilación de Parcel
+.cache/
+.parcel-cache/
+dist/
+
+# Archivos del sistema y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
