@@ -15,7 +15,13 @@
       <button id="btn-datasource" class="toggle-btn">Modo: HISTÓRICO (CSV)</button>
     </div>
 
-    <!-- Bloque de Histórico (Oculto en Modo Live) -->
+    <!-- Selector de Capa: Clima vs Viento -->
+    <div class="control-group buttons">
+      <button id="btn-layer-weather" class="active">🌦️ Clima</button>
+      <button id="btn-layer-wind">💨 Viento</button>
+    </div>
+
+    <!-- Bloque de Histórico (Timelapse) -->
     <div id="timelapse-controls">
       <div class="control-group">
         <label for="date-picker">FECHA:</label>
@@ -24,7 +30,7 @@
 
       <div class="control-group">
         <label for="time-slider">Hora: <span id="time-display">12:00</span></label>
-        <input type="range" id="time-slider" min="0" max="23" value="12" step="1">
+        <input type="range" id="time-slider" min="0" max="23" value="12" step="0.01"> <!-- Permite fluidez decimal -->
       </div>
 
       <div class="control-group buttons">
@@ -39,6 +45,11 @@
     <div class="control-group buttons">
       <button id="btn-thermal">Capa Térmica</button>
       <button id="btn-mode">Vista 2D / 3D</button>
+    </div>
+
+    <!-- NUEVO BOTÓN PARA FASE 2 -->
+    <div class="control-group buttons" style="margin-top: 8px;">
+      <button id="btn-labels" class="active">🏷️ Nombres / Líneas</button>
     </div>
   </div>
 

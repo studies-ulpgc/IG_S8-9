@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+// Importamos el renderizador 2D para HTML overlays
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import csvDataPath from './assets/data/climaData.csv';
 
 import iconSun from './assets/icons/sun.png';
@@ -27,8 +29,11 @@ function getWeatherTexture(code) {
 
 let parsedData = [];
 const activeSprites = [];
+const activeLabels = [];
+let labelRenderer;
+let boundariesGroup = new THREE.Group();
 
-const municipiosCoords = [
+export const municipiosCoords = [
   { municipio: "Las Palmas", lat: 28.1235, lon: -15.4363 },
   { municipio: "Telde", lat: 27.9961, lon: -15.4162 },
   { municipio: "Maspalomas", lat: 27.7606, lon: -15.5860 },
@@ -40,11 +45,7 @@ const municipiosCoords = [
   { municipio: "Teror", lat: 28.0592, lon: -15.5476 }
 ];
 
-// --- CONVERSIÓN CORREGIDA Y EXTRA DESPLAZADA A LA IZQUIERDA ---
-// --- FUNCIÓN DE CONVERSIÓN PROPORCIONAL CORREGIDA ---
 export function latLonToVector3(lat, lon) {
-  // Al ampliar estos límites geográficos, la matemática "encoge" la malla de iconos
-  // obligándolos a entrar dentro de los márgenes reales de la costa de la isla.
   const minLon = -16.14; 
   const maxLon = -15.04; 
   const minLat = 27.63;  
@@ -53,18 +54,12 @@ export function latLonToVector3(lat, lon) {
   const PLANE_WIDTH = 180;
   const PLANE_HEIGHT = 108;
 
-  // Hacemos una conversión lineal pura basada en porcentajes (0% a 100% de la imagen)
   const pctX = (lon - minLon) / (maxLon - minLon);
   const pctZ = (maxLat - lat) / (maxLat - minLat);
   
   const offsetX = -10.0; 
-
-  // Mueve TODO el bloque en vertical.
-  // - Números NEGATIVOS lo mueven hacia el NORTE (arriba).
-  // - Números POSITIVOS lo mueven hacia el SUR (abajo).
   const offsetZ = 0.0; 
 
-  // Posicionamos los iconos de forma 100% proporcional al tamaño del plano
   const x = (pctX - 0.5) * PLANE_WIDTH + offsetX;
   const z = (pctZ - 0.5) * PLANE_HEIGHT + offsetZ;
   const y = 12; 
@@ -72,6 +67,78 @@ export function latLonToVector3(lat, lon) {
   return new THREE.Vector3(x, y, z);
 }
 
+// Inicializar el Renderizador de Etiquetas HTML (CSS2D)
+export function initLabelRenderer(container) {
+  labelRenderer = new CSS2DRenderer();
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.domElement.style.position = 'absolute';
+  labelRenderer.domElement.style.top = '0px';
+  labelRenderer.domElement.style.pointerEvents = 'none';
+  container.appendChild(labelRenderer.domElement);
+  return labelRenderer;
+}
+
+// Crear los carteles flotantes con los nombres de los municipios
+export function setupMunicipiosLabels(scene) {
+  municipiosCoords.forEach(m => {
+    const pos = latLonToVector3(m.lat, m.lon);
+    
+    const div = document.createElement('div');
+    div.className = 'map-label';
+    div.textContent = m.municipio;
+
+    const labelObj = new CSS2DObject(div);
+    // Colocamos el texto ligeramente por debajo del icono de clima
+    labelObj.position.set(pos.x, pos.y - 4, pos.z);
+
+    scene.add(labelObj);
+    activeLabels.push(labelObj);
+  });
+}
+
+// Dibujar la cuadrícula / guías visuales del territorio
+export function setupTerritoryLines(scene) {
+  scene.add(boundariesGroup);
+  
+  // Dibujamos un marco concéntrico simulando zonas administrativas sobre la isla
+  municipiosCoords.forEach(m => {
+    const center = latLonToVector3(m.lat, m.lon);
+    const geometry = new THREE.BufferGeometry();
+    const points = [];
+    const radius = 6;
+    const segments = 16;
+
+    for (let i = 0; i <= segments; i++) {
+      const theta = (i / segments) * Math.PI * 2;
+      points.push(new THREE.Vector3(
+        center.x + Math.cos(theta) * radius,
+        center.y - 9.5, // Pegado al terreno
+        center.z + Math.sin(theta) * radius
+      ));
+    }
+
+    geometry.setFromPoints(points);
+    const lineMaterial = new THREE.LineDashedMaterial({
+      color: 0x38bdf8,
+      dashSize: 1,
+      gapSize: 0.5,
+      opacity: 0.4,
+      transparent: true
+    });
+
+    const line = new THREE.Line(geometry, lineMaterial);
+    line.computeLineDistances();
+    boundariesGroup.add(line);
+  });
+}
+
+// Alternar visibilidad de Etiquetas y Líneas
+export function toggleLabelsAndLines(visible) {
+  activeLabels.forEach(l => {
+    l.element.style.display = visible ? 'block' : 'none';
+  });
+  boundariesGroup.visible = visible;
+}
 
 export async function loadWeatherData() {
   try {
@@ -81,16 +148,16 @@ export async function loadWeatherData() {
 
     parsedData = lines.slice(1).map(line => {
       const values = line.split(',');
-      if(values.length < 6) return null;
+      if (values.length < 6) return null;
       return {
-        municipio: values[0].replace(/"/g, ''), // <-- ARREGLADO: values[0] en vez de values
+        municipio: values[0].replace(/"/g, ''),
         lat: parseFloat(values[1]),
         lon: parseFloat(values[2]),
         hora: parseInt(values[3], 10),
         temp: parseFloat(values[4]),
         codigo_clima: parseInt(values[5], 10),
-        viento_vel: parseFloat(values[6]),
-        viento_dir: parseFloat(values[7])
+        viento_vel: parseFloat(values[6] || 0),
+        viento_dir: parseFloat(values[7] || 0)
       };
     }).filter(Boolean);
   } catch (error) {
@@ -104,7 +171,7 @@ export async function fetchLiveWeatherData() {
 
   for (const m of municipiosCoords) {
     try {
-      const url = `https://open-meteo.com{m.lat}&longitude=${m.lon}&current_weather=true`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${m.lat}&longitude=${m.lon}&current_weather=true`;
       const res = await fetch(url);
       const data = await res.json();
       
@@ -114,7 +181,9 @@ export async function fetchLiveWeatherData() {
         lon: m.lon,
         hora: currentHour,
         temp: data.current_weather.temperature,
-        codigo_clima: data.current_weather.weathercode
+        codigo_clima: data.current_weather.weathercode,
+        viento_vel: data.current_weather.windspeed,
+        viento_dir: data.current_weather.winddirection
       });
     } catch (e) {
       console.error(`Error API para ${m.municipio}:`, e);
@@ -122,16 +191,15 @@ export async function fetchLiveWeatherData() {
   }
 }
 
-export function updateSpritesForHour(scene, hour) {
-  // Obliga a esperar a que el CSV se lea correctamente sin errores
+export function updateSpritesForHour(scene, hourDecimal) {
   if (parsedData.length === 0) return;
 
-  const currentHourData = parsedData.filter(d => d.hora === hour);
+  const baseHour = Math.floor(hourDecimal);
+  const currentHourData = parsedData.filter(d => d.hora === baseHour);
 
   if (activeSprites.length === 0) {
     municipiosCoords.forEach(m => {
       const item = currentHourData.find(d => d.municipio === m.municipio) || { codigo_clima: 0, lat: m.lat, lon: m.lon };
-      
       const posicion3D = latLonToVector3(item.lat, item.lon);
 
       const spriteMaterial = new THREE.SpriteMaterial({
@@ -142,7 +210,7 @@ export function updateSpritesForHour(scene, hour) {
 
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.position.copy(posicion3D);
-      sprite.scale.set(7, 7, 1);
+      sprite.scale.set(5, 5, 1);
       
       scene.add(sprite);
       activeSprites.push({ sprite, municipio: m.municipio });
