@@ -1,23 +1,28 @@
-<html>
-  <head>
-    <title>Práctica S8 IG</title>
-    <meta charset="UTF-8" />
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-      }
-    </style>
-  </head>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clima Gran Canaria 3D</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <!-- Panel de control flotante sobre el mapa 3D -->
+  <div id="ui-container">
+    <h2>Visor Climático GC</h2>
+    
+    <div class="control-group">
+      <label for="time-slider">Hora: <span id="time-display">12:00</span></label>
+      <input type="range" id="time-slider" min="0" max="23" value="12" step="1">
+    </div>
 
-  <body>
-    <div id="app"></div>
+    <div class="control-group buttons">
+      <button id="btn-mode">Vista 2D / 3D</button>
+      <button id="btn-thermal">Capa Térmica</button>
+    </div>
+  </div>
 
-    <!--S8-->
-    <script src="script_21_terreno.js" type="module"></script>
-    <!--script src="script_24_mapasitycleta.js" type="module"></script-->
-    <!--script src="script_25_mapasitycletav2.js" type="module"></script-->
-    <!--script src="script_26_mapaosm.js" type="module"></script-->
-  </body>
+  <!-- El script principal de Three.js -->
+  <script type="module" src="./main.js"></script>
+</body>
 </html>
