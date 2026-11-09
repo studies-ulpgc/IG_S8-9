@@ -1,20 +1,29 @@
-// Rangos geográficos aproximados del encuadre de Gran Canaria
-const MAP_BOUNDS = {
-  minLat: 27.73,  // Sur (Maspalomas)
-  maxLat: 28.18,  // Norte (Las Palmas)
-  minLon: -15.83, // Oeste (Agaete)
-  maxLon: -15.35  // Este (Telde)
-};
+// --- ÚNICA FUNCIÓN DE CONVERSIÓN CALIBRADA (BORRA LAS ANTERIORES) ---
+export function latLonToVector3(lat, lon) {
+  // Límites geográficos reales de la caja de Gran Canaria
+  const minLon = -15.86; 
+  const maxLon = -15.32; 
+  const minLat = 27.70;  
+  const maxLat = 28.21;  
 
-/**
- * Convierte latitud y longitud en coordenadas X, Z para el plano 3D
- */
-export function latLonToVector3(lat, lon, planeWidth = 280, planeHeight = 160) {
-  const u = (lon - MAP_BOUNDS.minLon) / (MAP_BOUNDS.maxLon - MAP_BOUNDS.minLon);
-  const v = (lat - MAP_BOUNDS.minLat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat);
+  const PLANE_WIDTH = 180;
+  const PLANE_HEIGHT = 108;
 
-  const x = (u - 0.5) * planeWidth;
-  const z = -(v - 0.5) * planeHeight;
+  // Calibración exacta de expansión (X y Z independientes) para que lleguen a la costa
+  const zoomFactorX = 0.74; 
+  const zoomFactorZ = 0.81; 
 
-  return { x, z };
+  const pctX = (lon - minLon) / (maxLon - minLon);
+  const pctZ = (maxLat - lat) / (maxLat - minLat);
+
+  // Desfase fino calculado matemáticamente para clavar a Tejeda (la nube de lluvia) 
+  // exactamente en el centro geográfico de tu relieve visual
+  const offsetX = -13.0; 
+  const offsetZ = -5.0;
+
+  const x = (pctX - 0.5) * PLANE_WIDTH * zoomFactorX + offsetX;
+  const z = (pctZ - 0.5) * PLANE_HEIGHT * zoomFactorZ + offsetZ;
+  const y = 14; 
+
+  return new THREE.Vector3(x, y, z);
 }

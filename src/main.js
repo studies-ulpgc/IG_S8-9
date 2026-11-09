@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import textureImg from './assets/relief/gc-texture.png';
 import heightmapImg from './assets/relief/gc-heightmap.png';
-import { loadWeatherData, updateSpritesForHour } from './api.js';
+import { loadWeatherData, updateSpritesForHour, fetchLiveWeatherData } from './api.js';
 
 // 1. Escena, Cámara y Renderizador
 const scene = new THREE.Scene();
@@ -14,19 +14,20 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-camera.position.set(0, 160, 180);
+// Posición cercana para enfocar la isla EN GRANDE
+camera.position.set(0, 60, 75);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
-// 2. Controles de Cámara
+// 2. Controles de Cámara (Google Maps)
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.minDistance = 40;
-controls.maxDistance = 350;
+controls.minDistance = 15;
+controls.maxDistance = 140;
 controls.maxPolarAngle = Math.PI / 2.05;
 
 // 3. Iluminación
@@ -37,92 +38,141 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
 dirLight.position.set(100, 150, 50);
 scene.add(dirLight);
 
-// 4. Terreno 3D
+// 4. Terreno 3D Ampliado
 const textureLoader = new THREE.TextureLoader();
 const texture = textureLoader.load(textureImg);
 const heightmap = textureLoader.load(heightmapImg);
 
-const PLANE_WIDTH = 280;
-const PLANE_HEIGHT = 160;
+// Ejemplo: Mostrar solo el 60% central del ancho y alto de la imagen
+const zoomFactorX = 0.6; 
+const zoomFactorY = 0.6;
+
+[texture, heightmap].forEach((tex) => {
+  tex.repeat.set(zoomFactorX, zoomFactorY);
+  // Centramos el recorte (ajusta estos valores de 0 a 1 hasta encuadrar solo GC)
+  tex.offset.set((1 - zoomFactorX) / 2, (1 - zoomFactorY) / 2); 
+});
+
+const PLANE_WIDTH = 180; // Reducimos el tamaño del plano para mantener la proporción
+const PLANE_HEIGHT = 108; 
 const geometry = new THREE.PlaneGeometry(PLANE_WIDTH, PLANE_HEIGHT, 256, 256);
 
 const material = new THREE.MeshStandardMaterial({
   map: texture,
   displacementMap: heightmap,
-  displacementScale: 30,
-  displacementBias: 0,
+  displacementScale: 18,
+  displacementBias: -4,
   roughness: 0.8
 });
+
 
 const terrain = new THREE.Mesh(geometry, material);
 terrain.rotation.x = -Math.PI / 2;
 scene.add(terrain);
 
-// 5. Textura Térmica Dinámica
-function createThermalTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-
-  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-  gradient.addColorStop(0, '#3b82f6');
-  gradient.addColorStop(0.5, '#eab308');
-  gradient.addColorStop(1, '#ef4444');
-
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 256, 256);
-
-  return new THREE.CanvasTexture(canvas);
-}
-
-const thermalTexture = createThermalTexture();
-
-// 6. Estado e Interactividad UI
+// 5. Capa Térmica Dinámica
 let isThermal = false;
 let is2D = false;
 
 document.getElementById('btn-thermal').addEventListener('click', () => {
   isThermal = !isThermal;
-  material.map = isThermal ? thermalTexture : texture;
+  if (isThermal) {
+    material.color.setHex(0xff7744);
+  } else {
+    material.color.setHex(0xffffff);
+  }
   material.needsUpdate = true;
 });
 
+// Botón Vista 2D / 3D
 document.getElementById('btn-mode').addEventListener('click', () => {
   is2D = !is2D;
   if (is2D) {
-    camera.position.set(0, 220, 0.01);
+    camera.position.set(0, 120, 0.01);
     controls.maxPolarAngle = 0;
   } else {
-    camera.position.set(0, 160, 180);
+    camera.position.set(0, 60, 75);
     controls.maxPolarAngle = Math.PI / 2.05;
   }
   controls.target.set(0, 0, 0);
   controls.update();
 });
 
-// 7. Conexión del Slider de Horas (0 - 23h)
+// 6. UI y Lógica del Boceto
 const timeSlider = document.getElementById('time-slider');
 const timeDisplay = document.getElementById('time-display');
+const btnPlay = document.getElementById('btn-play');
+const btnSpeed = document.getElementById('btn-speed');
+const btnDataSource = document.getElementById('btn-datasource');
+const timelapseContainer = document.getElementById('timelapse-controls');
 
-timeSlider.addEventListener('input', (e) => {
-  const hour = parseInt(e.target.value, 10);
+let isPlaying = false;
+let playSpeed = 1;
+let lastTimeUpdate = 0;
+let isLiveMode = false;
+
+function setHour(hour) {
+  timeSlider.value = hour;
   timeDisplay.textContent = `${hour.toString().padStart(2, '0')}:00`;
   updateSpritesForHour(scene, hour);
+}
+
+timeSlider.addEventListener('input', (e) => {
+  setHour(parseInt(e.target.value, 10));
 });
 
-// 8. Inicialización de Datos Climáticos y Sprites
-loadWeatherData().then(() => {
-  updateSpritesForHour(scene, 12); // Cargar hora por defecto (12:00)
+btnPlay.addEventListener('click', () => {
+  isPlaying = !isPlaying;
+  btnPlay.textContent = isPlaying ? '⏸ Pausa' : '▶ Play';
 });
 
-// 9. Loop de Animación
-function animate() {
+const speeds = [1, 1.5, 2];
+let speedIdx = 0;
+btnSpeed.addEventListener('click', () => {
+  speedIdx = (speedIdx + 1) % speeds.length;
+  playSpeed = speeds[speedIdx];
+  btnSpeed.textContent = `Vel: x${playSpeed}`;
+});
+
+// Cambio entre Modo LIVE e Histórico (Tal como en tu dibujo)
+btnDataSource.addEventListener('click', async () => {
+  // En el loop animate() de src/main.js
+    if (!isLiveMode && isPlaying && time - lastTimeUpdate > (1000 / playSpeed)) {
+    let currentHour = parseInt(timeSlider.value, 10) + 1;
+    
+    if (currentHour > 23) {
+        currentHour = 0;
+        // Avanzar la fecha en la UI
+        const datePicker = document.getElementById('date-picker');
+        const currentDate = new Date(datePicker.value);
+        currentDate.setDate(currentDate.getDate() + 1);
+        datePicker.value = currentDate.toISOString().split('T')[0];
+    }
+    
+    setHour(currentHour);
+    lastTimeUpdate = time;
+    }
+});
+
+// 7. Loop de Animación
+function animate(time) {
   requestAnimationFrame(animate);
   controls.update();
+
+  if (!isLiveMode && isPlaying && time - lastTimeUpdate > (1000 / playSpeed)) {
+    let currentHour = (parseInt(timeSlider.value, 10) + 1) % 24;
+    setHour(currentHour);
+    lastTimeUpdate = time;
+  }
+
   renderer.render(scene, camera);
 }
-animate();
+
+loadWeatherData().then(() => {
+  setHour(12);
+});
+
+animate(0);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;

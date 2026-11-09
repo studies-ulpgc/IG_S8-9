@@ -7,22 +7,41 @@
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <!-- Panel de control flotante sobre el mapa 3D -->
   <div id="ui-container">
     <h2>Visor Climático GC</h2>
     
+    <!-- Botón Modo Live / Histórico -->
     <div class="control-group">
-      <label for="time-slider">Hora: <span id="time-display">12:00</span></label>
-      <input type="range" id="time-slider" min="0" max="23" value="12" step="1">
+      <button id="btn-datasource" class="toggle-btn">Modo: HISTÓRICO (CSV)</button>
     </div>
 
+    <!-- Bloque de Histórico (Oculto en Modo Live) -->
+    <div id="timelapse-controls">
+      <div class="control-group">
+        <label for="date-picker">FECHA:</label>
+        <input type="date" id="date-picker" value="2026-11-09">
+      </div>
+
+      <div class="control-group">
+        <label for="time-slider">Hora: <span id="time-display">12:00</span></label>
+        <input type="range" id="time-slider" min="0" max="23" value="12" step="1">
+      </div>
+
+      <div class="control-group buttons">
+        <button id="btn-play">▶ Play</button>
+        <button id="btn-speed">Vel: x1</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Botones de Acción Estáticos -->
     <div class="control-group buttons">
-      <button id="btn-mode">Vista 2D / 3D</button>
       <button id="btn-thermal">Capa Térmica</button>
+      <button id="btn-mode">Vista 2D / 3D</button>
     </div>
   </div>
 
-  <!-- El script principal de Three.js -->
   <script type="module" src="./main.js"></script>
 </body>
 </html>
