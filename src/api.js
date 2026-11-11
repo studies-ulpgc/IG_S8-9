@@ -1,6 +1,7 @@
+// api.js
 import * as THREE from 'three';
-// Importamos el renderizador 2D para HTML overlays
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { municipiosCoords } from './municipios.js'; // 👈 Importamos la lista centralizada
 import csvDataPath from './assets/data/climaData.csv';
 import textureImg from './assets/relief/gc-texture.png';
 import heightmapImg from './assets/relief/gc-heightmap.png';
@@ -11,20 +12,18 @@ import iconCloud from './assets/icons/cloud.png';
 import iconPartlyCloudy from './assets/icons/partly_cloudy.png';
 import iconRain from './assets/icons/rain.png';
 import iconThunder from './assets/icons/cloud_thunder.png';
-import iconWind from './assets/icons/wind_arrow.png';
+
+export { municipiosCoords };
 
 const textureLoader = new THREE.TextureLoader();
 const weatherTextures = {};
+// En api.js (al cargar las texturas)
 export const weatherTexturesReady = Promise.all([
-  iconSun,
-  iconCloud,
-  iconPartlyCloudy,
-  iconRain,
-  iconThunder,
-  iconWind
+  iconSun, iconCloud, iconPartlyCloudy, iconRain, iconThunder
 ].map(source => new Promise((resolve, reject) => {
   textureLoader.load(source, resolve, undefined, reject);
-}))).then(([sun, cloud, partlyCloudy, rain, thunder, wind]) => {
+}))).then(([sun, cloud, partlyCloudy, rain, thunder]) => {
+  const wind = createWindArrowTexture(); // 👈 Flecha generada por código
   Object.assign(weatherTextures, { sun, cloud, partlyCloudy, rain, thunder, wind });
 });
 
@@ -62,36 +61,14 @@ export const terrainCenter = new THREE.Vector3(TERRAIN_OFFSET_X, 0, TERRAIN_OFFS
 let linesTexture;
 let lastSpriteUpdate = '';
 
-export const municipiosCoords = [
-  { municipio: "Agaete", lat: 28.1001, lon: -15.7011 },
-  { municipio: "Agüimes", lat: 27.9050, lon: -15.4460 },
-  { municipio: "Artenara", lat: 28.0200, lon: -15.6470 },
-  { municipio: "Arucas", lat: 28.1189, lon: -15.5230 },
-  { municipio: "Firgas", lat: 28.1080, lon: -15.5630 },
-  { municipio: "Gáldar", lat: 28.1470, lon: -15.6542 },
-  { municipio: "Ingenio", lat: 27.9180, lon: -15.4350 },
-  { municipio: "La Aldea de San Nicolás", lat: 27.9840, lon: -15.7810 },
-  { municipio: "Las Palmas de Gran Canaria", lat: 28.1235, lon: -15.4363 },
-  { municipio: "Mogán", lat: 27.8838, lon: -15.7252 },
-  { municipio: "Moya", lat: 28.1110, lon: -15.5820 },
-  { municipio: "San Bartolomé de Tirajana", lat: 27.9240, lon: -15.5730 },
-  { municipio: "Santa Brígida", lat: 28.0330, lon: -15.4930 },
-  { municipio: "Santa Lucía de Tirajana", lat: 27.9110, lon: -15.5410 },
-  { municipio: "Santa María de Guía", lat: 28.1400, lon: -15.6330 },
-  { municipio: "Tejeda", lat: 27.9958, lon: -15.6161 },
-  { municipio: "Telde", lat: 27.9961, lon: -15.4162 },
-  { municipio: "Teror", lat: 28.0592, lon: -15.5476 },
-  { municipio: "Valleseco", lat: 28.0520, lon: -15.5750 },
-  { municipio: "Valsequillo", lat: 27.9860, lon: -15.4970 },
-  { municipio: "Vega de San Mateo", lat: 28.0080, lon: -15.5330 }
-];
+// Guardaremos el rango de fechas detectadas en el CSV
+export let csvDateRange = { min: null, max: null };
 
 export function latLonToVector3(lat, lon) {
   const pctX = (lon - geographicBounds.minLon) / (geographicBounds.maxLon - geographicBounds.minLon);
   const pctZ = (geographicBounds.maxLat - lat) / (geographicBounds.maxLat - geographicBounds.minLat);
   const x = (pctX - 0.5) * TERRAIN_WIDTH * TERRAIN_ZOOM_X + TERRAIN_OFFSET_X;
   const z = (pctZ - 0.5) * TERRAIN_HEIGHT * TERRAIN_ZOOM_Z + TERRAIN_OFFSET_Z;
-
   return new THREE.Vector3(x, 0, z);
 }
 
@@ -106,13 +83,11 @@ export function getTerrainSurfaceHeight(terrain, worldX, worldZ) {
   const { width, height, widthSegments, heightSegments } = geometry.parameters;
   const gridX = THREE.MathUtils.clamp(
     ((worldX - terrain.position.x + width / 2) / width) * widthSegments,
-    0,
-    widthSegments
+    0, widthSegments
   );
   const gridY = THREE.MathUtils.clamp(
     ((worldZ - terrain.position.z + height / 2) / height) * heightSegments,
-    0,
-    heightSegments
+    0, heightSegments
   );
   const cellX = Math.min(Math.floor(gridX), widthSegments - 1);
   const cellY = Math.min(Math.floor(gridY), heightSegments - 1);
@@ -135,14 +110,11 @@ export function getTerrainSurfaceHeight(terrain, worldX, worldZ) {
   return terrain.position.y + localHeight;
 }
 
-// api.js
 export function updateMunicipioLabelVisibility(camera, terrain, showLabels = true) {
-  if (!showLabels) return; // 👈 Si están desactivadas, no recalcular oclusión ni cambiar estilo
-  
+  if (!showLabels) return;
   const cameraPosition = camera.getWorldPosition(new THREE.Vector3());
   activeLabels.forEach(label => {
     if (label.element.style.display === 'none') return;
-    
     const labelPosition = label.getWorldPosition(new THREE.Vector3());
     const distance = cameraPosition.distanceTo(labelPosition);
     const steps = Math.min(64, Math.max(12, Math.ceil(distance / 2)));
@@ -168,10 +140,7 @@ export function createAlignedHeightmapCanvas(source, width, height) {
   const context = canvas.getContext('2d');
   const sourceAspect = source.naturalWidth / source.naturalHeight;
   const targetAspect = width / height;
-  let sx = 0;
-  let sy = 0;
-  let sw = source.naturalWidth;
-  let sh = source.naturalHeight;
+  let sx = 0, sy = 0, sw = source.naturalWidth, sh = source.naturalHeight;
   if (sourceAspect > targetAspect) {
     sw = source.naturalHeight * targetAspect;
     sx = (source.naturalWidth - sw) / 2;
@@ -180,12 +149,9 @@ export function createAlignedHeightmapCanvas(source, width, height) {
     sy = (source.naturalHeight - sh) / 2;
   }
   context.drawImage(source, sx, sy, sw, sh, 0, 0, width, height);
-  // The source heightmap includes Tenerife in the upper-left; this map only covers Gran Canaria.
-  context.clearRect(0, 0, width * 0.12, height * 0.30);
   return canvas;
 }
 
-// Inicializar el Renderizador de Etiquetas HTML (CSS2D)
 export function initLabelRenderer(container) {
   labelRenderer = new CSS2DRenderer();
   labelRenderer.setSize(window.innerWidth, window.innerHeight);
@@ -196,7 +162,6 @@ export function initLabelRenderer(container) {
   return labelRenderer;
 }
 
-// Crear los carteles flotantes con los nombres de los municipios
 export function setupMunicipiosLabels(scene, terrain) {
   municipiosCoords.forEach(m => {
     const div = document.createElement('div');
@@ -210,15 +175,11 @@ export function setupMunicipiosLabels(scene, terrain) {
   });
 }
 
-// api.js
 export function setupTerritoryLines(scene, terrain) {
   if (!linesTexture) return;
-
   const geometry = terrain.geometry.clone();
   const positions = geometry.attributes.position;
-
-  // 🔹 1. ALTURA (Flotación sobre las montañas)
-  const ALTURA_FLOTACION = 1.8; // Ajusta este valor (0.3, 0.8, 1.2...) para subir/bajar
+  const ALTURA_FLOTACION = 1.8;
   for (let i = 0; i < positions.count; i++) {
     positions.setZ(i, positions.getZ(i) + ALTURA_FLOTACION);
   }
@@ -230,33 +191,28 @@ export function setupTerritoryLines(scene, terrain) {
     transparent: true,
     opacity: 0.9,
     depthWrite: false,
+    depthTest: false,
     polygonOffset: true,
     polygonOffsetFactor: -2
   }));
 
   overlay.rotation.copy(terrain.rotation);
   overlay.position.copy(terrain.position);
+  overlay.position.x += 1.5;
+  overlay.position.z += 1.5;
 
-  // 🔹 2. POSICIÓN (Mover Izquierda/Derecha y Norte/Sur)
-  overlay.position.x += 1.5; // ➕ Mueve a la DERECHA | ➖ Mueve a la IZQUIERDA
-  overlay.position.z += 1.5; // ➕ Mueve al SUR (Abajo) | ➖ Mueve al NORTE (Arriba)
-
-  // 🔹 3. ANCHO Y LARGO (Escalar la malla de las líneas)
-  const ESCALA_ANCHO = 0.95; // 1.05 = 5% más ancho (Este-Oeste)
-  const ESCALA_LARGO = 1.05; // 1.05 = 5% más largo (Norte-Sur)
+  const ESCALA_ANCHO = 0.95;
+  const ESCALA_LARGO = 1.05;
   overlay.scale.set(ESCALA_ANCHO, ESCALA_LARGO, 1.0);
 
-  overlay.renderOrder = -1; // Mantiene las líneas por detrás de los iconos
+  overlay.renderOrder = -1;
   boundariesGroup.add(overlay);
   scene.add(boundariesGroup);
 }
 
-// Alternar visibilidad de Etiquetas y Líneas
-// api.js
 export function toggleMunicipioLabels(visible) {
   activeLabels.forEach(l => {
     if (l.element) {
-      // Usamos tanto display como opacidad/pointer-events para asegurar que se oculte totalmente
       l.element.style.display = visible ? 'block' : 'none';
       l.element.style.visibility = visible ? 'visible' : 'hidden';
     }
@@ -272,31 +228,45 @@ export function toggleLabelsAndLines(visible) {
   toggleMunicipioLines(visible);
 }
 
+// 🔹 LECTURA DEL CSV CON SOPORTE DE FECHAS Y RANGO AUTOMÁTICO
 export async function loadWeatherData() {
   try {
     const response = await fetch(csvDataPath);
-    if (!response.ok) {
-      throw new Error(`No se pudo cargar climaData.csv (${response.status}).`);
-    }
+    if (!response.ok) throw new Error(`No se pudo cargar climaData.csv (${response.status}).`);
     const text = await response.text();
     const lines = text.trim().split('\n');
+
+    const fechasEncontradas = new Set();
 
     parsedData = lines.slice(1).map(line => {
       const values = line.split(',');
       if (values.length < 6) return null;
-      const municipio = values[0].replace(/"/g, '');
+      
+      const hasDateColumn = values.length >= 9;
+      const fecha = hasDateColumn ? values[3].replace(/"/g, '').trim() : null;
+      if (fecha) fechasEncontradas.add(fecha);
+
+      const municipio = values[0].replace(/"/g, '').trim();
       return {
         municipio: municipio === 'Las Palmas' ? 'Las Palmas de Gran Canaria' :
-          municipio === 'Maspalomas' ? 'San Bartolomé de Tirajana' : municipio,
+                   municipio === 'Maspalomas' ? 'San Bartolomé de Tirajana' : municipio,
         lat: parseFloat(values[1]),
         lon: parseFloat(values[2]),
-        hora: parseInt(values[3], 10),
-        temp: parseFloat(values[4]),
-        codigo_clima: parseInt(values[5], 10),
-        viento_vel: parseFloat(values[6] || 0),
-        viento_dir: parseFloat(values[7] || 0)
+        fecha: fecha,
+        hora: parseInt(values[hasDateColumn ? 4 : 3], 10),
+        temp: parseFloat(values[hasDateColumn ? 5 : 4]),
+        codigo_clima: parseInt(values[hasDateColumn ? 6 : 5], 10),
+        viento_vel: parseFloat(values[hasDateColumn ? 7 : 6] || 0),
+        viento_dir: parseFloat(values[hasDateColumn ? 8 : 7] || 0)
       };
     }).filter(Boolean);
+
+    if (fechasEncontradas.size > 0) {
+      const sortedDates = Array.from(fechasEncontradas).sort();
+      csvDateRange.min = sortedDates[0];
+      csvDateRange.max = sortedDates[sortedDates.length - 1];
+    }
+
     lastRenderedThermalHour = null;
     lastSpriteUpdate = '';
   } catch (error) {
@@ -315,15 +285,14 @@ export async function fetchLiveWeatherData() {
     try {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${m.lat}&longitude=${m.lon}&current_weather=true`;
       const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(`Open-Meteo respondió ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Open-Meteo respondió ${res.status}`);
       const data = await res.json();
       
       return {
         municipio: m.municipio,
         lat: m.lat,
         lon: m.lon,
+        fecha: null,
         hora: currentHour,
         temp: data.current_weather.temperature,
         codigo_clima: data.current_weather.weathercode,
@@ -341,6 +310,7 @@ export async function fetchLiveWeatherData() {
     throw new Error('No se pudieron obtener datos meteorológicos LIVE.');
   }
 }
+
 function getMunicipalityWeather(municipio, currentHourData) {
   const exactMatch = currentHourData.find(item => item.municipio === municipio.municipio);
   if (exactMatch) return exactMatch;
@@ -377,12 +347,18 @@ function getMunicipalityWeather(municipio, currentHourData) {
   };
 }
 
-export function updateSpritesForHour(scene, terrain, hourDecimal, layer = 'weather', visible = true) {
+export function updateSpritesForHour(scene, terrain, hourDecimal, layer = 'weather', visible = true, selectedDate = null) {
   const baseHour = Math.floor(hourDecimal);
-  const updateKey = `${baseHour}-${layer}-${visible}`;
+  const updateKey = `${selectedDate}-${baseHour}-${layer}-${visible}`;
   if (updateKey === lastSpriteUpdate) return;
   lastSpriteUpdate = updateKey;
-  const currentHourData = parsedData.filter(d => d.hora === baseHour);
+
+  // Filtrar por la hora y por la fecha seleccionada en el datepicker (si existe columna de fecha)
+  const currentHourData = parsedData.filter(d => {
+    const matchHour = d.hora === baseHour;
+    const matchDate = selectedDate && d.fecha ? d.fecha === selectedDate : true;
+    return matchHour && matchDate;
+  });
 
   municipiosCoords.forEach(municipio => {
     const item = getMunicipalityWeather(municipio, currentHourData);
@@ -419,7 +395,7 @@ export function updateSpritesForHour(scene, terrain, hourDecimal, layer = 'weath
     entry.sprite.visible = visible;
   });
 
-  updateHeatmapTexture(hourDecimal);
+  updateHeatmapTexture(hourDecimal, selectedDate);
 }
 
 const thermalCanvas = document.createElement('canvas');
@@ -454,13 +430,8 @@ export const municipalityLinesReady = loadImage(linesImg, 'los límites municipa
     detectionCanvas.height = 960;
     const detectionContext = detectionCanvas.getContext('2d');
     detectionContext.drawImage(image, 0, 0, detectionCanvas.width, detectionCanvas.height);
-    const detectionPixels = detectionContext.getImageData(
-      0, 0, detectionCanvas.width, detectionCanvas.height
-    ).data;
-    let minX = detectionCanvas.width;
-    let minY = detectionCanvas.height;
-    let maxX = -1;
-    let maxY = -1;
+    const detectionPixels = detectionContext.getImageData(0, 0, detectionCanvas.width, detectionCanvas.height).data;
+    let minX = detectionCanvas.width, minY = detectionCanvas.height, maxX = -1, maxY = -1;
     for (let y = 0; y < detectionCanvas.height; y++) {
       for (let x = 0; x < detectionCanvas.width; x++) {
         if (detectionPixels[(y * detectionCanvas.width + x) * 4 + 3] < 16) continue;
@@ -481,14 +452,10 @@ export const municipalityLinesReady = loadImage(linesImg, 'los límites municipa
     const scaleY = image.naturalHeight / detectionCanvas.height;
     context.drawImage(
       image,
-      minX * scaleX,
-      minY * scaleY,
-      (maxX - minX + 1) * scaleX,
-      (maxY - minY + 1) * scaleY,
-      canvas.width * 0.29,
-      canvas.height * 0.24,
-      canvas.width * 0.31,
-      canvas.height * 0.49
+      minX * scaleX, minY * scaleY,
+      (maxX - minX + 1) * scaleX, (maxY - minY + 1) * scaleY,
+      canvas.width * 0.29, canvas.height * 0.24,
+      canvas.width * 0.31, canvas.height * 0.49
     );
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     for (let i = 0; i < imageData.data.length; i += 4) {
@@ -559,8 +526,7 @@ export const thermalReady = Promise.all([
     }
 
     if (seed < 0 || visited[seed]) return;
-    let head = 0;
-    let tail = 0;
+    let head = 0, tail = 0;
     queue[tail++] = seed;
     visited[seed] = 1;
     landComponents++;
@@ -622,12 +588,17 @@ function temperatureToRgb(temp) {
   );
 }
 
-export function updateHeatmapTexture(hourDecimal) {
+export function updateHeatmapTexture(hourDecimal, selectedDate = null) {
   lastThermalHour = hourDecimal;
   if (!thermalInitialized || !satelliteImage || !islandMaskCanvas) return;
   const baseHour = Math.floor(hourDecimal);
   if (baseHour === lastRenderedThermalHour) return;
-  const currentHourData = parsedData.filter(d => d.hora === baseHour);
+
+  const currentHourData = parsedData.filter(d => {
+    const matchHour = d.hora === baseHour;
+    const matchDate = selectedDate && d.fecha ? d.fecha === selectedDate : true;
+    return matchHour && matchDate;
+  });
 
   thermalCtx.clearRect(0, 0, thermalCanvas.width, thermalCanvas.height);
   thermalCtx.drawImage(satelliteImage, 0, 0, thermalCanvas.width, thermalCanvas.height);
@@ -672,4 +643,39 @@ export function updateHeatmapTexture(hourDecimal) {
   thermalCtx.globalAlpha = 1;
   thermalTexture.needsUpdate = true;
   lastRenderedThermalHour = baseHour;
+}
+
+// api.js
+export function createWindArrowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+
+  ctx.clearRect(0, 0, 128, 128);
+
+  // Sombra suave para destacar sobre el terreno
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+
+  // Dibujar flecha (forma de punta de lanza gruesa)
+  ctx.fillStyle = '#38bdf8'; // Azul claro brillante
+  ctx.strokeStyle = '#0284c7'; // Borde azul contrastado
+  ctx.lineWidth = 6;
+
+  ctx.beginPath();
+  ctx.moveTo(64, 10);   // Punta superior
+  ctx.lineTo(108, 105); // Ala derecha
+  ctx.lineTo(64, 80);   // Hendidura central
+  ctx.lineTo(20, 105);  // Ala izquierda
+  ctx.closePath();
+
+  ctx.fill();
+  ctx.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
 }

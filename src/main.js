@@ -1,3 +1,4 @@
+// main.js
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import textureImg from './assets/relief/gc-texture.png';
@@ -24,7 +25,8 @@ import {
   TERRAIN_TEXTURE_OFFSET,
   getTerrainSurfaceHeight,
   terrainCenter,
-  thermalTexture
+  thermalTexture,
+  csvDateRange
 } from './api.js';
 
 // 1. Escena, Cámara y Renderizador
@@ -44,10 +46,8 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
 
-// INICIALIZAR RENDERIZADOR DE ETIQUETAS (CSS2D - Fase 2)
 const labelRenderer = initLabelRenderer(document.body);
 
-// Controles de Cámara
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
@@ -87,6 +87,7 @@ const terrainReady = new Promise((resolve, reject) => {
   resolveTerrainReady = resolve;
   rejectTerrainReady = reject;
 });
+
 const heightmap = textureLoader.load(heightmapImg, (loadedHeightmap) => {
   try {
     const source = loadedHeightmap.image;
@@ -103,22 +104,31 @@ const heightmap = textureLoader.load(heightmapImg, (loadedHeightmap) => {
 
     for (let i = 0; i < positions.count; i++) {
       sampleUv.set(uvAttribute.getX(i), uvAttribute.getY(i));
-      loadedHeightmap.transformUv(sampleUv);
-      const sourceX = sampleUv.x * (heightCanvas.width - 1);
-      const sourceY = sampleUv.y * (heightCanvas.height - 1);
+      
+      // Muestreo aplicando exactamente el mismo repeat y offset que la textura
+      const uvX = sampleUv.x * TERRAIN_TEXTURE_REPEAT + TERRAIN_TEXTURE_OFFSET;
+      const uvY = sampleUv.y * TERRAIN_TEXTURE_REPEAT + TERRAIN_TEXTURE_OFFSET;
+
+      const sourceX = uvX * (heightCanvas.width - 1);
+      const sourceY = (1 - uvY) * (heightCanvas.height - 1);
+
       const x0 = Math.floor(sourceX);
       const y0 = Math.floor(sourceY);
       const x1 = Math.min(x0 + 1, heightCanvas.width - 1);
       const y1 = Math.min(y0 + 1, heightCanvas.height - 1);
       const xBlend = sourceX - x0;
       const yBlend = sourceY - y0;
+
       const topLeft = heightPixels[(y0 * heightCanvas.width + x0) * 4];
       const topRight = heightPixels[(y0 * heightCanvas.width + x1) * 4];
       const bottomLeft = heightPixels[(y1 * heightCanvas.width + x0) * 4];
       const bottomRight = heightPixels[(y1 * heightCanvas.width + x1) * 4];
+
       const top = THREE.MathUtils.lerp(topLeft, topRight, xBlend);
       const bottom = THREE.MathUtils.lerp(bottomLeft, bottomRight, xBlend);
-      const elevation = THREE.MathUtils.lerp(top, bottom, yBlend) / 255;
+      const elevationRaw = THREE.MathUtils.lerp(top, bottom, yBlend) / 255;
+
+      const elevation = Math.sqrt(elevationRaw); 
       positions.setZ(i, elevation * material.displacementScale + material.displacementBias);
     }
 
@@ -128,6 +138,7 @@ const heightmap = textureLoader.load(heightmapImg, (loadedHeightmap) => {
     material.displacementMap = null;
     material.needsUpdate = true;
     resolveTerrainReady();
+    
   } catch (error) {
     rejectTerrainReady(error);
   }
@@ -147,8 +158,8 @@ const PLANE_HEIGHT = TERRAIN_HEIGHT;
 const material = new THREE.MeshStandardMaterial({
   map: texture,
   displacementMap: heightmap,
-  displacementScale: 13,
-  displacementBias: -2,
+  displacementScale: 10,
+  displacementBias: 0,
   roughness: 0.8
 });
 
@@ -236,6 +247,15 @@ controls.addEventListener('change', () => {
   requestRender();
 });
 
+// 🔹 CONFIGURACIÓN DINÁMICA DEL RANGO DEL CALENDARIO
+function setupDatePickerLimits() {
+  if (csvDateRange.min && csvDateRange.max) {
+    datePicker.setAttribute('min', csvDateRange.min);
+    datePicker.setAttribute('max', csvDateRange.max);
+    datePicker.value = csvDateRange.max; // Seleccionamos por defecto el día más reciente
+  }
+}
+
 function setHour(hourDecimal) {
   currentHourValue = hourDecimal;
   timeSlider.value = hourDecimal;
@@ -243,7 +263,7 @@ function setHour(hourDecimal) {
   const minutes = Math.floor((hourDecimal % 1) * 60);
   timeDisplay.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   if (isSceneInitialized) {
-    updateSpritesForHour(scene, terrain, hourDecimal, selectedLayer, showWeatherIcons);
+    updateSpritesForHour(scene, terrain, hourDecimal, selectedLayer, showWeatherIcons, datePicker.value);
   }
   requestRender();
 }
@@ -290,6 +310,7 @@ async function setLiveMode(enabled) {
     timelapseControls.style.display = 'block';
     try {
       await loadWeatherData();
+      setupDatePickerLimits();
       setHour(parseFloat(timeSlider.value));
     } catch (error) {
       console.error('No se pudo volver al modo histórico:', error);
@@ -303,9 +324,11 @@ async function setLiveMode(enabled) {
 
 btnDataSource.addEventListener('click', () => setLiveMode(!isLiveMode));
 document.getElementById('btn-today').addEventListener('click', () => setLiveMode(true));
+
 datePicker.addEventListener('change', () => {
-  if (datePicker.value === formatLocalDate(new Date())) {
-    setLiveMode(true);
+  if (!isLiveMode && isSceneInitialized) {
+    updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons, datePicker.value);
+    requestRender();
   }
 });
 
@@ -316,7 +339,7 @@ function selectLayer(layer) {
   btnWeatherLayer.classList.toggle('active', layer === 'weather');
   btnWindLayer.classList.toggle('active', layer === 'wind');
   if (isSceneInitialized) {
-    updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons);
+    updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons, datePicker.value);
   }
   requestRender();
 }
@@ -327,12 +350,11 @@ btnIcons.addEventListener('click', () => {
   showWeatherIcons = !showWeatherIcons;
   btnIcons.classList.toggle('active', showWeatherIcons);
   if (isSceneInitialized) {
-    updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons);
+    updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons, datePicker.value);
   }
   requestRender();
 });
 
-// Visibilidad independiente de nombres y límites municipales
 const btnLabels = document.getElementById('btn-labels');
 let showLabels = false;
 btnLabels.addEventListener('click', () => {
@@ -361,7 +383,7 @@ btnThermal.addEventListener('click', () => {
   if (legendUI) legendUI.hidden = !isThermalActive;
   if (isThermalActive) {
     if (isSceneInitialized) {
-      updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons);
+      updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons, datePicker.value);
     }
     material.map = thermalTexture;
   } else {
@@ -422,13 +444,14 @@ function animate(now) {
     currentHour += (delta * playSpeed) / 5; 
 
     if (currentHour >= 24) {
-      const todayStr = formatLocalDate(new Date());
+      const [year, month, day] = datePicker.value.split('-').map(Number);
+      const currentDate = new Date(year, month - 1, day);
+      currentDate.setDate(currentDate.getDate() + 1);
+      const nextDateStr = formatLocalDate(currentDate);
 
-      if (datePicker.value !== todayStr) {
-        const [year, month, day] = datePicker.value.split('-').map(Number);
-        const currentDate = new Date(year, month - 1, day);
-        currentDate.setDate(currentDate.getDate() + 1);
-        datePicker.value = formatLocalDate(currentDate);
+      // Si la siguiente fecha no supera la fecha máxima del CSV, avanzamos de día
+      if (!csvDateRange.max || nextDateStr <= csvDateRange.max) {
+        datePicker.value = nextDateStr;
         currentHour = 0;
       } else {
         currentHour = 23.99;
@@ -439,21 +462,14 @@ function animate(now) {
     setHour(currentHour);
   }
 
-  // main.js - Reemplaza la animación de intro dentro de la función animate(now)
   if (introAnimationActive) {
     const progress = Math.min((now - introStartTime) / introDuration, 1);
-    // Curva de suavizado suave (Cubic easing out)
     const easedProgress = 1 - Math.pow(1 - progress, 3);
-
-    // Posición inicial (Lejos y arriba en el cielo)
     const startCamPos = terrainCenter.clone().add(new THREE.Vector3(40, 220, 260));
-    // Posición final cinemática ideal
     const targetCamPos = endCameraPosition; 
 
-    // Interpolación de posición (Fly-in cinemático)
     camera.position.lerpVectors(startCamPos, targetCamPos, easedProgress);
     
-    // Ligero movimiento orbital de 15 grados en lugar de vueltas completas
     const subtleAngle = (1 - easedProgress) * 0.25; 
     camera.position.x += Math.sin(subtleAngle) * 30;
 
@@ -487,6 +503,7 @@ Promise.all([
   thermalReady,
   weatherTexturesReady
 ]).then(() => {
+  setupDatePickerLimits(); // 👈 Capamos el calendario dinámicamente según el CSV
   setupMunicipiosLabels(scene, terrain);
   setupTerritoryLines(scene, terrain);
   toggleMunicipioLabels(showLabels);
