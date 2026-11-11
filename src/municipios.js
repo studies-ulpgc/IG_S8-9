@@ -1,4 +1,3 @@
-// src/municipios.js
 export const municipiosCoords = [
   { municipio: "Agaete", lat: 28.1001, lon: -15.6611 },
   { municipio: "Agüimes", lat: 27.8650, lon: -15.4660 },

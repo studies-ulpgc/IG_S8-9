@@ -13,29 +13,29 @@
       <button id="btn-collapse" type="button" aria-label="Plegar menú" aria-expanded="true" aria-controls="ui-content">−</button>
     </div>
     <div id="ui-content">
-    
-    <!-- Botón Modo Live / Histórico -->
+
     <div class="control-group">
       <button id="btn-datasource" class="toggle-btn">Modo: HISTÓRICO (CSV)</button>
     </div>
 
-    <!-- Selector de Capa: Clima vs Viento -->
     <div class="control-group buttons">
-      <button id="btn-layer-weather" class="active">🌦️ Clima</button>
-      <button id="btn-layer-wind">💨 Viento</button>
+      <button id="btn-layer-weather" class="active">Clima</button>
+      <button id="btn-layer-wind">Viento</button>
     </div>
 
-    <!-- Bloque de Histórico (Timelapse) -->
+    <div class="control-group date-group">
+      <label for="date-picker">FECHA:</label>
+      <input type="date" id="date-picker" value="2026-11-09">
+    </div>
+
     <div id="timelapse-controls">
       <div class="control-group">
-        <label for="date-picker">FECHA:</label>
-        <input type="date" id="date-picker" value="2026-11-09">
-        <button id="btn-today" type="button" style="margin-top: 6px;">Hoy · LIVE</button>
-      </div>
-
-      <div class="control-group">
-        <label for="time-slider">Hora: <span id="time-display">12:00</span></label>
+        <label for="time-slider">Hora actual: <span id="time-display" class="time-value">12:00</span></label>
         <input type="range" id="time-slider" min="0" max="23.99" value="12" step="0.01">
+        <div class="time-range-labels">
+          <span>00:00</span>
+          <span>23:59</span>
+        </div>
       </div>
 
       <div class="control-group buttons">
@@ -46,14 +46,13 @@
 
     <hr class="divider">
 
-    <!-- Botones de Acción Estáticos -->
     <div class="control-group buttons">
       <button id="btn-thermal">Capa Térmica</button>
-      <button id="btn-mode">Vista 2D / 3D</button>
+      <button id="btn-mode">Vista Estática</button>
     </div>
 
     <div class="control-group buttons" style="margin-top: 8px;">
-      <button id="btn-labels">🏷️ Nombres</button>
+      <button id="btn-labels">Nombres</button>
       <button id="btn-lines">Límites</button>
       <button id="btn-icons" class="active">Iconos</button>
     </div>
@@ -70,7 +69,7 @@
         <span>8°</span>
       </div>
     </div>
-    <p class="data-note">En el histórico, municipios sin estación propia usan datos estimados de estaciones cercanas.</p>
+    <p class="data-note">El tamaño de las flechas de viento escala proporcionalmente según su velocidad en km/h.</p>
     </div>
   </div>
 

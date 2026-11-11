@@ -1,4 +1,3 @@
-// main.js
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import textureImg from './assets/relief/gc-texture.png';
@@ -29,7 +28,6 @@ import {
   csvDateRange
 } from './api.js';
 
-// 1. Escena, Cámara y Renderizador
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0f172a);
 
@@ -69,7 +67,6 @@ const camera2D = new THREE.OrthographicCamera(
 );
 camera2D.up.set(0, 0, -1);
 
-// 2. Iluminación
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
 scene.add(ambientLight);
 
@@ -77,7 +74,6 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
 dirLight.position.set(100, 150, 50);
 scene.add(dirLight);
 
-// 3. Terreno 3D
 const textureLoader = new THREE.TextureLoader();
 const texture = textureLoader.load(textureImg);
 let terrain;
@@ -105,7 +101,6 @@ const heightmap = textureLoader.load(heightmapImg, (loadedHeightmap) => {
     for (let i = 0; i < positions.count; i++) {
       sampleUv.set(uvAttribute.getX(i), uvAttribute.getY(i));
       
-      // Muestreo aplicando exactamente el mismo repeat y offset que la textura
       const uvX = sampleUv.x * TERRAIN_TEXTURE_REPEAT + TERRAIN_TEXTURE_OFFSET;
       const uvY = sampleUv.y * TERRAIN_TEXTURE_REPEAT + TERRAIN_TEXTURE_OFFSET;
 
@@ -187,7 +182,6 @@ const endCameraPosition = terrainCenter.clone().add(new THREE.Vector3(0, 100, 14
 camera.position.copy(endCameraPosition);
 camera.lookAt(terrainCenter);
 
-// 5. Controles UI y Timelapse
 const timeSlider = document.getElementById('time-slider');
 const timeDisplay = document.getElementById('time-display');
 const btnPlay = document.getElementById('btn-play');
@@ -247,12 +241,11 @@ controls.addEventListener('change', () => {
   requestRender();
 });
 
-// 🔹 CONFIGURACIÓN DINÁMICA DEL RANGO DEL CALENDARIO
 function setupDatePickerLimits() {
   if (csvDateRange.min && csvDateRange.max) {
     datePicker.setAttribute('min', csvDateRange.min);
     datePicker.setAttribute('max', csvDateRange.max);
-    datePicker.value = csvDateRange.max; // Seleccionamos por defecto el día más reciente
+    datePicker.value = csvDateRange.max; 
   }
 }
 
@@ -323,7 +316,6 @@ async function setLiveMode(enabled) {
 }
 
 btnDataSource.addEventListener('click', () => setLiveMode(!isLiveMode));
-document.getElementById('btn-today').addEventListener('click', () => setLiveMode(true));
 
 datePicker.addEventListener('change', () => {
   if (!isLiveMode && isSceneInitialized) {
@@ -419,7 +411,6 @@ document.getElementById('btn-mode').addEventListener('click', (event) => {
   requestRender();
 });
 
-// 6. Loop Principal
 function animate(now) {
   frameRequest = null;
   const delta = (now - lastFrameTime) / 1000;
@@ -449,7 +440,6 @@ function animate(now) {
       currentDate.setDate(currentDate.getDate() + 1);
       const nextDateStr = formatLocalDate(currentDate);
 
-      // Si la siguiente fecha no supera la fecha máxima del CSV, avanzamos de día
       if (!csvDateRange.max || nextDateStr <= csvDateRange.max) {
         datePicker.value = nextDateStr;
         currentHour = 0;
@@ -495,7 +485,6 @@ function animate(now) {
   if (!isLiveMode && isPlaying) requestRender();
 }
 
-// Inicialización completa
 Promise.all([
   loadWeatherData(),
   terrainReady,
@@ -503,7 +492,7 @@ Promise.all([
   thermalReady,
   weatherTexturesReady
 ]).then(() => {
-  setupDatePickerLimits(); // 👈 Capamos el calendario dinámicamente según el CSV
+  setupDatePickerLimits();
   setupMunicipiosLabels(scene, terrain);
   setupTerritoryLines(scene, terrain);
   toggleMunicipioLabels(showLabels);

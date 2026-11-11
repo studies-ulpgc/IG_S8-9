@@ -1,4 +1,3 @@
-// generarCSV.js
 import fs from 'fs';
 import path from 'path';
 import { municipiosCoords } from '../../municipios.js';
@@ -8,7 +7,6 @@ async function generarCSV() {
   let csvContent = "municipio,lat,lon,fecha,hora,temp,codigo_clima,viento_vel,viento_dir\n";
 
   for (const m of municipiosCoords) {
-    // past_days=90 para obtener el registro histórico de los últimos 3 meses
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${m.lat}&longitude=${m.lon}&hourly=temperature_2m,weathercode,windspeed_10m,winddirection_10m&past_days=90&forecast_days=1`;
     
     try {

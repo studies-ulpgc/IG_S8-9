@@ -1,7 +1,6 @@
-// api.js
 import * as THREE from 'three';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { municipiosCoords } from './municipios.js'; // 👈 Importamos la lista centralizada
+import { municipiosCoords } from './municipios.js';
 import csvDataPath from './assets/data/climaData.csv';
 import textureImg from './assets/relief/gc-texture.png';
 import heightmapImg from './assets/relief/gc-heightmap.png';
@@ -17,13 +16,12 @@ export { municipiosCoords };
 
 const textureLoader = new THREE.TextureLoader();
 const weatherTextures = {};
-// En api.js (al cargar las texturas)
 export const weatherTexturesReady = Promise.all([
   iconSun, iconCloud, iconPartlyCloudy, iconRain, iconThunder
 ].map(source => new Promise((resolve, reject) => {
   textureLoader.load(source, resolve, undefined, reject);
 }))).then(([sun, cloud, partlyCloudy, rain, thunder]) => {
-  const wind = createWindArrowTexture(); // 👈 Flecha generada por código
+  const wind = createWindArrowTexture();
   Object.assign(weatherTextures, { sun, cloud, partlyCloudy, rain, thunder, wind });
 });
 
@@ -61,7 +59,6 @@ export const terrainCenter = new THREE.Vector3(TERRAIN_OFFSET_X, 0, TERRAIN_OFFS
 let linesTexture;
 let lastSpriteUpdate = '';
 
-// Guardaremos el rango de fechas detectadas en el CSV
 export let csvDateRange = { min: null, max: null };
 
 export function latLonToVector3(lat, lon) {
@@ -228,7 +225,6 @@ export function toggleLabelsAndLines(visible) {
   toggleMunicipioLines(visible);
 }
 
-// 🔹 PARSEAR CSV CON FALLBACK PARA VALORES NULL
 export async function loadWeatherData() {
   try {
     const response = await fetch(csvDataPath);
@@ -280,7 +276,6 @@ export async function loadWeatherData() {
   }
 }
 
-// 🔹 ACTUALIZACIÓN DE ICONOS Y FLECHAS FRACTURADAS DE LA CÁMARA (MESHS PLANOS PARA EL VIENTO)
 export function updateSpritesForHour(scene, terrain, hourDecimal, layer = 'weather', visible = true, selectedDate = null) {
   const baseHour = Math.floor(hourDecimal);
   const updateKey = `${selectedDate}-${baseHour}-${layer}-${visible}`;
@@ -298,7 +293,6 @@ export function updateSpritesForHour(scene, terrain, hourDecimal, layer = 'weath
     let entry = activeSprites.find(spriteEntry => spriteEntry.municipio === municipio.municipio);
 
     if (!entry && item) {
-      // Creamos Sprite para el clima e Mesh para la flecha de viento
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
         transparent: true, depthTest: true, depthWrite: false
       }));
@@ -307,7 +301,7 @@ export function updateSpritesForHour(scene, terrain, hourDecimal, layer = 'weath
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({ transparent: true, depthTest: true, depthWrite: false })
       );
-      windMesh.rotation.x = -Math.PI / 2; // Tumbado en la superficie
+      windMesh.rotation.x = -Math.PI / 2;
 
       const pos = getTerrainPosition(terrain, municipio.lat, municipio.lon, 3);
       sprite.position.copy(pos);
@@ -332,7 +326,6 @@ export function updateSpritesForHour(scene, terrain, hourDecimal, layer = 'weath
       entry.windMesh.material.map = weatherTextures.wind;
       entry.windMesh.material.needsUpdate = true;
 
-      // 🔹 Rotación Brújula: apunta HACIA donde sopla el viento sin girar al mover la cámara
       const targetDirDeg = (item.viento_dir || 0) + 180;
       entry.windMesh.rotation.z = -THREE.MathUtils.degToRad(targetDirDeg);
 
@@ -670,7 +663,6 @@ export function updateHeatmapTexture(hourDecimal, selectedDate = null) {
   lastRenderedThermalHour = baseHour;
 }
 
-// api.js
 export function createWindArrowTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
@@ -679,22 +671,20 @@ export function createWindArrowTexture() {
 
   ctx.clearRect(0, 0, 128, 128);
 
-  // Sombra suave para destacar sobre el terreno
   ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
   ctx.shadowBlur = 6;
   ctx.shadowOffsetX = 2;
   ctx.shadowOffsetY = 2;
 
-  // Dibujar flecha (forma de punta de lanza gruesa)
-  ctx.fillStyle = '#38bdf8'; // Azul claro brillante
-  ctx.strokeStyle = '#0284c7'; // Borde azul contrastado
+  ctx.fillStyle = '#38bdf8';
+  ctx.strokeStyle = '#0284c7';
   ctx.lineWidth = 6;
 
   ctx.beginPath();
-  ctx.moveTo(64, 10);   // Punta superior
-  ctx.lineTo(108, 105); // Ala derecha
-  ctx.lineTo(64, 80);   // Hendidura central
-  ctx.lineTo(20, 105);  // Ala izquierda
+  ctx.moveTo(64, 10);   
+  ctx.lineTo(108, 105); 
+  ctx.lineTo(64, 80);   
+  ctx.lineTo(20, 105);  
   ctx.closePath();
 
   ctx.fill();
