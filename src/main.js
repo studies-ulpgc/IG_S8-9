@@ -285,7 +285,7 @@ async function setLiveMode(enabled) {
   isLiveMode = enabled;
   if (isLiveMode) {
     datePicker.value = formatLocalDate(new Date());
-    btnDataSource.textContent = 'Modo: LIVE (Tiempo Real)';
+    btnDataSource.textContent = 'LIVE';
     timelapseControls.style.display = 'none';
     isPlaying = false;
     btnPlay.textContent = '▶ Play';
@@ -295,11 +295,11 @@ async function setLiveMode(enabled) {
     } catch (error) {
       console.error('No se pudo activar el modo LIVE:', error);
       isLiveMode = false;
-      btnDataSource.textContent = 'Modo: HISTÓRICO (CSV)';
+      btnDataSource.textContent = 'HISTÓRICO';
       timelapseControls.style.display = 'block';
     }
   } else {
-    btnDataSource.textContent = 'Modo: HISTÓRICO (CSV)';
+    btnDataSource.textContent = 'HISTÓRICO';
     timelapseControls.style.display = 'block';
     try {
       await loadWeatherData();
@@ -308,7 +308,7 @@ async function setLiveMode(enabled) {
     } catch (error) {
       console.error('No se pudo volver al modo histórico:', error);
       isLiveMode = true;
-      btnDataSource.textContent = 'Modo: LIVE (Tiempo Real)';
+      btnDataSource.textContent = 'LIVE';
       timelapseControls.style.display = 'none';
     }
   }
