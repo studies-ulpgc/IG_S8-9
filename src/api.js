@@ -205,35 +205,54 @@ export function setupMunicipiosLabels(scene, terrain) {
   });
 }
 
+// api.js
 export function setupTerritoryLines(scene, terrain) {
-  if (!linesTexture) {
-    throw new Error('No se pudo preparar la textura de límites municipales.');
-  }
+  if (!linesTexture) return;
+
   const geometry = terrain.geometry.clone();
   const positions = geometry.attributes.position;
+
+  // 🔹 1. ALTURA (Flotación sobre las montañas)
+  const ALTURA_FLOTACION = 1.8; // Ajusta este valor (0.3, 0.8, 1.2...) para subir/bajar
   for (let i = 0; i < positions.count; i++) {
-    positions.setZ(i, positions.getZ(i) + 0.2);
+    positions.setZ(i, positions.getZ(i) + ALTURA_FLOTACION);
   }
   positions.needsUpdate = true;
   geometry.computeVertexNormals();
+
   const overlay = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
     map: linesTexture,
     transparent: true,
     opacity: 0.9,
     depthWrite: false,
     polygonOffset: true,
-    polygonOffsetFactor: -1
+    polygonOffsetFactor: -2
   }));
+
   overlay.rotation.copy(terrain.rotation);
   overlay.position.copy(terrain.position);
+
+  // 🔹 2. POSICIÓN (Mover Izquierda/Derecha y Norte/Sur)
+  overlay.position.x += 1.5; // ➕ Mueve a la DERECHA | ➖ Mueve a la IZQUIERDA
+  overlay.position.z += 1.5; // ➕ Mueve al SUR (Abajo) | ➖ Mueve al NORTE (Arriba)
+
+  // 🔹 3. ANCHO Y LARGO (Escalar la malla de las líneas)
+  const ESCALA_ANCHO = 0.95; // 1.05 = 5% más ancho (Este-Oeste)
+  const ESCALA_LARGO = 1.05; // 1.05 = 5% más largo (Norte-Sur)
+  overlay.scale.set(ESCALA_ANCHO, ESCALA_LARGO, 1.0);
+
+  overlay.renderOrder = -1; // Mantiene las líneas por detrás de los iconos
   boundariesGroup.add(overlay);
   scene.add(boundariesGroup);
 }
 
 // Alternar visibilidad de Etiquetas y Líneas
+// api.js
 export function toggleMunicipioLabels(visible) {
   activeLabels.forEach(l => {
-    l.element.style.display = visible ? '' : 'none';
+    if (l.element) {
+      l.element.style.display = visible ? 'block' : 'none';
+    }
   });
 }
 
@@ -459,10 +478,10 @@ export const municipalityLinesReady = loadImage(linesImg, 'los límites municipa
       minY * scaleY,
       (maxX - minX + 1) * scaleX,
       (maxY - minY + 1) * scaleY,
-      canvas.width * 0.30,
-      canvas.height * 0.20,
-      canvas.width * 0.30,
-      canvas.height * 0.55
+      canvas.width * 0.29,
+      canvas.height * 0.24,
+      canvas.width * 0.31,
+      canvas.height * 0.49
     );
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     for (let i = 0; i < imageData.data.length; i += 4) {
@@ -470,7 +489,6 @@ export const municipalityLinesReady = loadImage(linesImg, 'los límites municipa
       imageData.data[i] = 56;
       imageData.data[i + 1] = 189;
       imageData.data[i + 2] = 248;
-      imageData.data[i + 3] = 255;
     }
     context.putImageData(imageData, 0, 0);
     linesTexture = new THREE.CanvasTexture(canvas);
@@ -577,22 +595,24 @@ export const thermalReady = Promise.all([
 });
 
 function temperatureToRgb(temp) {
-  const norm = Math.max(0, Math.min(1, (temp - 10) / 28));
-  const hue = (1 - norm) * 140 / 60;
-  const chroma = 0.9;
-  const x = chroma * (1 - Math.abs(hue % 2 - 1));
-  let red;
-  let green;
-  let blue;
-  if (hue < 1) [red, green, blue] = [chroma, x, 0];
-  else if (hue < 2) [red, green, blue] = [x, chroma, 0];
-  else [red, green, blue] = [0, chroma, x];
-  const match = 0.5 - chroma / 2;
-  return [
-    Math.round((red + match) * 255),
-    Math.round((green + match) * 255),
-    Math.round((blue + match) * 255)
+  const stops = [
+    { temperature: 8, color: [34, 197, 94] },
+    { temperature: 16, color: [250, 204, 21] },
+    { temperature: 24, color: [249, 115, 22] },
+    { temperature: 30, color: [239, 68, 68] },
+    { temperature: 34, color: [185, 28, 28] },
+    { temperature: 37, color: [127, 29, 29] },
+    { temperature: 40, color: [91, 48, 34] }
   ];
+  const clampedTemperature = THREE.MathUtils.clamp(temp, 8, 40);
+  const upperIndex = stops.findIndex(stop => stop.temperature >= clampedTemperature);
+  const upper = stops[upperIndex];
+  const lower = stops[Math.max(0, upperIndex - 1)];
+  const mix = (clampedTemperature - lower.temperature) /
+    Math.max(upper.temperature - lower.temperature, 1);
+  return lower.color.map((channel, index) =>
+    Math.round(THREE.MathUtils.lerp(channel, upper.color[index], mix))
+  );
 }
 
 export function updateHeatmapTexture(hourDecimal) {

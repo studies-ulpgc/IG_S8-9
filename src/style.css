@@ -32,10 +32,39 @@ canvas {
   z-index: 10;
 }
 
+#ui-container.is-collapsed {
+  min-width: 0;
+  padding: 8px 12px;
+}
+
+.ui-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 #ui-container h2 {
   font-size: 1.1rem;
   margin-bottom: 12px;
   color: #38bdf8;
+}
+
+#ui-container.is-collapsed h2 {
+  display: none;
+}
+
+#btn-collapse {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 30px;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+#ui-container.is-collapsed #ui-content {
+  display: none;
 }
 
 .control-group {
@@ -119,41 +148,54 @@ button.active {
   border: 1px solid rgba(56, 189, 248, 0.5);
   border-radius: 4px;
   backdrop-filter: blur(4px);
-  pointer-events: none; /* Permite arrastrar el mapa a través del texto */
+  z-index: 1; /* Para que quede detrás de los iconos 3D si están cerca */
+  pointer-events: none !important;
   user-select: none;
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   transition: opacity 0.3s ease;
+  margin-top: 2em; 
 }
 
-/* Leyenda Estilo TV del Mapa Térmico */
 .thermal-legend {
-  margin-top: 12px;
-  background: rgba(15, 23, 42, 0.9);
+  position: absolute;
+  left: calc(100% + 10px);
+  bottom: 56px;
+  align-items: center;
+  gap: 8px;
+  width: 96px;
+  padding: 7px 9px;
+  background: rgba(15, 23, 42, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
-  padding: 8px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   display: flex;
-  align-items: center;
-  gap: 10px;
+  pointer-events: none;
+}
+
+.thermal-legend[hidden] {
+  display: none;
 }
 
 .legend-title {
   font-weight: bold;
-  font-size: 12px;
+  font-size: 10px;
   color: #38bdf8;
 }
 
 .legend-bar {
-  width: 14px;
-  height: 90px;
-  border-radius: 4px;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 66px;
+  border-radius: 5px;
   background: linear-gradient(to top,
-    #10b981 0%,   /* 8°C Verde */
-    #eab308 30%,  /* 18°C Amarillo */
-    #f97316 65%,  /* 30°C Naranja */
-    #ef4444 85%,  /* 38°C Rojo */
-    #7f1d1d 100%  /* 45°C Granate */
+    #22c55e 0%,
+    #facc15 25%,
+    #f97316 50%,
+    #ef4444 69%,
+    #b91c1c 81%,
+    #7f1d1d 91%,
+    #5b3022 100%
   );
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
@@ -162,8 +204,8 @@ button.active {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 90px;
-  font-size: 10px;
+  height: 66px;
+  font-size: 9px;
   color: #cbd5e1;
   font-weight: 600;
 }
@@ -174,4 +216,26 @@ button.active {
   color: #cbd5e1;
   font-size: 0.7rem;
   line-height: 1.4;
+}
+
+@media (max-width: 600px) {
+  #ui-container {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    min-width: 0;
+    max-width: 360px;
+    padding: 12px 14px;
+  }
+
+  #ui-container.is-collapsed {
+    right: auto;
+  }
+
+  .thermal-legend {
+    left: auto;
+    right: 10px;
+    bottom: auto;
+    top: 10px;
+  }
 }

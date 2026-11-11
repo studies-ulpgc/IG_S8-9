@@ -8,7 +8,11 @@
 </head>
 <body>
   <div id="ui-container">
-    <h2>Visor Climático GC</h2>
+    <div class="ui-header">
+      <h2>Visor Climático GC</h2>
+      <button id="btn-collapse" type="button" aria-label="Plegar menú" aria-expanded="true" aria-controls="ui-content">−</button>
+    </div>
+    <div id="ui-content">
     
     <!-- Botón Modo Live / Histórico -->
     <div class="control-group">
@@ -54,11 +58,12 @@
       <button id="btn-icons" class="active">Iconos</button>
     </div>
 
-    <div id="thermal-legend" class="thermal-legend" style="display: none;">
+    <div id="thermal-legend" class="thermal-legend" role="img" aria-label="Escala de temperatura en grados Celsius" hidden>
       <div class="legend-title">°C</div>
       <div class="legend-bar"></div>
       <div class="legend-labels">
         <span>40°</span>
+        <span>36°</span>
         <span>32°</span>
         <span>24°</span>
         <span>16°</span>
@@ -66,6 +71,7 @@
       </div>
     </div>
     <p class="data-note">En el histórico, municipios sin estación propia usan datos estimados de estaciones cercanas.</p>
+    </div>
   </div>
 
   <script type="module" src="./main.js"></script>

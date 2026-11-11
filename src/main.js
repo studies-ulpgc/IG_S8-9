@@ -147,8 +147,8 @@ const PLANE_HEIGHT = TERRAIN_HEIGHT;
 const material = new THREE.MeshStandardMaterial({
   map: texture,
   displacementMap: heightmap,
-  displacementScale: 18,
-  displacementBias: -4,
+  displacementScale: 13,
+  displacementBias: -2,
   roughness: 0.8
 });
 
@@ -172,7 +172,8 @@ thermalTexture.repeat.set(zoomFactorX, zoomFactorY);
 thermalTexture.offset.set(TERRAIN_TEXTURE_OFFSET, TERRAIN_TEXTURE_OFFSET);
 thermalTexture.anisotropy = maxAnisotropy;
 
-camera.position.copy(terrainCenter).add(new THREE.Vector3(0, 100, 140));
+const endCameraPosition = terrainCenter.clone().add(new THREE.Vector3(0, 100, 140));
+camera.position.copy(endCameraPosition);
 camera.lookAt(terrainCenter);
 
 // 5. Controles UI y Timelapse
@@ -183,6 +184,16 @@ const btnSpeed = document.getElementById('btn-speed');
 const btnDataSource = document.getElementById('btn-datasource');
 const timelapseControls = document.getElementById('timelapse-controls');
 const datePicker = document.getElementById('date-picker');
+const btnCollapse = document.getElementById('btn-collapse');
+const uiContainer = document.getElementById('ui-container');
+
+btnCollapse.addEventListener('click', () => {
+  const isExpanded = btnCollapse.getAttribute('aria-expanded') === 'true';
+  btnCollapse.setAttribute('aria-expanded', String(!isExpanded));
+  btnCollapse.setAttribute('aria-label', isExpanded ? 'Expandir menú' : 'Plegar menú');
+  btnCollapse.textContent = isExpanded ? '+' : '−';
+  uiContainer.classList.toggle('is-collapsed', isExpanded);
+});
 
 let isPlaying = false;
 let playSpeed = 1;
@@ -194,11 +205,30 @@ let frameRequest = null;
 let labelsNeedOcclusionUpdate = true;
 let selectedLayer = 'weather';
 let showWeatherIcons = true;
+let introAnimationActive = false;
+let introStartTime = 0;
+const introDuration = 4200;
 
 function requestRender() {
   if (frameRequest === null) {
     frameRequest = requestAnimationFrame(animate);
   }
+}
+
+function stopIntroAnimation() {
+  if (!introAnimationActive) return;
+  introAnimationActive = false;
+  removeIntroInputListeners();
+  controls.enabled = true;
+  controls.target.copy(terrainCenter);
+  lastFrameTime = performance.now();
+  requestRender();
+}
+
+function removeIntroInputListeners() {
+  window.removeEventListener('pointerdown', stopIntroAnimation, true);
+  window.removeEventListener('wheel', stopIntroAnimation, true);
+  window.removeEventListener('keydown', stopIntroAnimation, true);
 }
 
 controls.addEventListener('change', () => {
@@ -309,6 +339,7 @@ btnLabels.addEventListener('click', () => {
   showLabels = !showLabels;
   btnLabels.classList.toggle('active', showLabels);
   toggleMunicipioLabels(showLabels);
+  labelsNeedOcclusionUpdate = true;
   requestRender();
 });
 
@@ -327,7 +358,7 @@ const legendUI = document.getElementById('thermal-legend');
 btnThermal.addEventListener('click', () => {
   const isThermalActive = !btnThermal.classList.contains('active');
   btnThermal.classList.toggle('active', isThermalActive);
-  if (legendUI) legendUI.style.display = isThermalActive ? 'flex' : 'none';
+  if (legendUI) legendUI.hidden = !isThermalActive;
   if (isThermalActive) {
     if (isSceneInitialized) {
       updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons);
@@ -408,6 +439,37 @@ function animate(now) {
     setHour(currentHour);
   }
 
+  // main.js - Reemplaza la animación de intro dentro de la función animate(now)
+  if (introAnimationActive) {
+    const progress = Math.min((now - introStartTime) / introDuration, 1);
+    // Curva de suavizado suave (Cubic easing out)
+    const easedProgress = 1 - Math.pow(1 - progress, 3);
+
+    // Posición inicial (Lejos y arriba en el cielo)
+    const startCamPos = terrainCenter.clone().add(new THREE.Vector3(40, 220, 260));
+    // Posición final cinemática ideal
+    const targetCamPos = endCameraPosition; 
+
+    // Interpolación de posición (Fly-in cinemático)
+    camera.position.lerpVectors(startCamPos, targetCamPos, easedProgress);
+    
+    // Ligero movimiento orbital de 15 grados en lugar de vueltas completas
+    const subtleAngle = (1 - easedProgress) * 0.25; 
+    camera.position.x += Math.sin(subtleAngle) * 30;
+
+    camera.lookAt(terrainCenter);
+    labelsNeedOcclusionUpdate = true;
+
+    if (progress === 1) {
+      introAnimationActive = false;
+      removeIntroInputListeners();
+      controls.enabled = true;
+      camera.position.copy(endCameraPosition);
+      camera.lookAt(terrainCenter);
+    } else {
+      requestRender();
+    }
+  }
   if (labelsNeedOcclusionUpdate && isSceneInitialized) {
     updateMunicipioLabelVisibility(activeCamera, terrain);
     labelsNeedOcclusionUpdate = false;
@@ -433,8 +495,13 @@ Promise.all([
   btnLines.classList.toggle('active', showLines);
   isSceneInitialized = true;
   setHour(12);
-  controls.enabled = true;
-  lastFrameTime = performance.now();
+  controls.enabled = false;
+  introAnimationActive = true;
+  introStartTime = performance.now();
+  lastFrameTime = introStartTime;
+  window.addEventListener('pointerdown', stopIntroAnimation, { once: true, capture: true });
+  window.addEventListener('wheel', stopIntroAnimation, { once: true, capture: true });
+  window.addEventListener('keydown', stopIntroAnimation, { once: true, capture: true });
   requestRender();
 }).catch(error => {
   console.error('No se pudo iniciar el visor del terreno:', error);
