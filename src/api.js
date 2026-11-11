@@ -228,7 +228,7 @@ export function toggleLabelsAndLines(visible) {
   toggleMunicipioLines(visible);
 }
 
-// 🔹 LECTURA DEL CSV CON SOPORTE DE FECHAS Y RANGO AUTOMÁTICO
+// 🔹 PARSEAR CSV CON FALLBACK PARA VALORES NULL
 export async function loadWeatherData() {
   try {
     const response = await fetch(csvDataPath);
@@ -247,6 +247,11 @@ export async function loadWeatherData() {
       if (fecha) fechasEncontradas.add(fecha);
 
       const municipio = values[0].replace(/"/g, '').trim();
+      const rawTemp = values[hasDateColumn ? 5 : 4];
+      const rawCode = values[hasDateColumn ? 6 : 5];
+      const rawWindVel = values[hasDateColumn ? 7 : 6];
+      const rawWindDir = values[hasDateColumn ? 8 : 7];
+
       return {
         municipio: municipio === 'Las Palmas' ? 'Las Palmas de Gran Canaria' :
                    municipio === 'Maspalomas' ? 'San Bartolomé de Tirajana' : municipio,
@@ -254,10 +259,10 @@ export async function loadWeatherData() {
         lon: parseFloat(values[2]),
         fecha: fecha,
         hora: parseInt(values[hasDateColumn ? 4 : 3], 10),
-        temp: parseFloat(values[hasDateColumn ? 5 : 4]),
-        codigo_clima: parseInt(values[hasDateColumn ? 6 : 5], 10),
-        viento_vel: parseFloat(values[hasDateColumn ? 7 : 6] || 0),
-        viento_dir: parseFloat(values[hasDateColumn ? 8 : 7] || 0)
+        temp: rawTemp === 'null' || rawTemp === undefined ? 21.0 : parseFloat(rawTemp),
+        codigo_clima: rawCode === 'null' || rawCode === undefined ? 0 : parseInt(rawCode, 10),
+        viento_vel: rawWindVel === 'null' || rawWindVel === undefined ? 12.0 : parseFloat(rawWindVel),
+        viento_dir: rawWindDir === 'null' || rawWindDir === undefined ? 45.0 : parseFloat(rawWindDir)
       };
     }).filter(Boolean);
 
@@ -273,6 +278,77 @@ export async function loadWeatherData() {
     console.error("Error al cargar climaData.csv:", error);
     throw error;
   }
+}
+
+// 🔹 ACTUALIZACIÓN DE ICONOS Y FLECHAS FRACTURADAS DE LA CÁMARA (MESHS PLANOS PARA EL VIENTO)
+export function updateSpritesForHour(scene, terrain, hourDecimal, layer = 'weather', visible = true, selectedDate = null) {
+  const baseHour = Math.floor(hourDecimal);
+  const updateKey = `${selectedDate}-${baseHour}-${layer}-${visible}`;
+  if (updateKey === lastSpriteUpdate) return;
+  lastSpriteUpdate = updateKey;
+
+  const currentHourData = parsedData.filter(d => {
+    const matchHour = d.hora === baseHour;
+    const matchDate = selectedDate && d.fecha ? d.fecha === selectedDate : true;
+    return matchHour && matchDate;
+  });
+
+  municipiosCoords.forEach(municipio => {
+    const item = getMunicipalityWeather(municipio, currentHourData);
+    let entry = activeSprites.find(spriteEntry => spriteEntry.municipio === municipio.municipio);
+
+    if (!entry && item) {
+      // Creamos Sprite para el clima e Mesh para la flecha de viento
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        transparent: true, depthTest: true, depthWrite: false
+      }));
+      
+      const windMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({ transparent: true, depthTest: true, depthWrite: false })
+      );
+      windMesh.rotation.x = -Math.PI / 2; // Tumbado en la superficie
+
+      const pos = getTerrainPosition(terrain, municipio.lat, municipio.lon, 3);
+      sprite.position.copy(pos);
+      windMesh.position.copy(pos);
+
+      scene.add(sprite);
+      scene.add(windMesh);
+
+      entry = { sprite, windMesh, municipio: municipio.municipio };
+      activeSprites.push(entry);
+    }
+
+    if (!entry) return;
+    if (!item) {
+      entry.sprite.visible = false;
+      entry.windMesh.visible = false;
+      return;
+    }
+
+    if (layer === 'wind') {
+      entry.sprite.visible = false;
+      entry.windMesh.material.map = weatherTextures.wind;
+      entry.windMesh.material.needsUpdate = true;
+
+      // 🔹 Rotación Brújula: apunta HACIA donde sopla el viento sin girar al mover la cámara
+      const targetDirDeg = (item.viento_dir || 0) + 180;
+      entry.windMesh.rotation.z = -THREE.MathUtils.degToRad(targetDirDeg);
+
+      const windSize = 4 + Math.min(Math.max(item.viento_vel || 0, 0), 30) / 8;
+      entry.windMesh.scale.set(windSize, windSize, 1);
+      entry.windMesh.visible = visible;
+    } else {
+      entry.windMesh.visible = false;
+      entry.sprite.material.map = getWeatherTexture(item.codigo_clima);
+      entry.sprite.material.rotation = 0;
+      entry.sprite.scale.set(5, 5, 1);
+      entry.sprite.visible = visible;
+    }
+  });
+
+  updateHeatmapTexture(hourDecimal, selectedDate);
 }
 
 export async function fetchLiveWeatherData() {
@@ -345,57 +421,6 @@ function getMunicipalityWeather(municipio, currentHourData) {
     viento_dir: nearby[0].item.viento_dir,
     codigo_clima: nearby[0].item.codigo_clima
   };
-}
-
-export function updateSpritesForHour(scene, terrain, hourDecimal, layer = 'weather', visible = true, selectedDate = null) {
-  const baseHour = Math.floor(hourDecimal);
-  const updateKey = `${selectedDate}-${baseHour}-${layer}-${visible}`;
-  if (updateKey === lastSpriteUpdate) return;
-  lastSpriteUpdate = updateKey;
-
-  // Filtrar por la hora y por la fecha seleccionada en el datepicker (si existe columna de fecha)
-  const currentHourData = parsedData.filter(d => {
-    const matchHour = d.hora === baseHour;
-    const matchDate = selectedDate && d.fecha ? d.fecha === selectedDate : true;
-    return matchHour && matchDate;
-  });
-
-  municipiosCoords.forEach(municipio => {
-    const item = getMunicipalityWeather(municipio, currentHourData);
-    let entry = activeSprites.find(spriteEntry => spriteEntry.municipio === municipio.municipio);
-    if (!entry && item) {
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        transparent: true,
-        depthTest: true,
-        depthWrite: false
-      }));
-      sprite.position.copy(getTerrainPosition(terrain, municipio.lat, municipio.lon, 3));
-      scene.add(sprite);
-      entry = { sprite, municipio: municipio.municipio };
-      activeSprites.push(entry);
-    }
-    if (!entry) return;
-    if (!item) {
-      entry.sprite.visible = false;
-      return;
-    }
-    const map = layer === 'wind'
-      ? weatherTextures.wind
-      : getWeatherTexture(item.codigo_clima);
-    if (!entry.sprite.material.map) {
-      entry.sprite.material.needsUpdate = true;
-    }
-    entry.sprite.material.map = map;
-    entry.sprite.material.rotation = layer === 'wind'
-      ? THREE.MathUtils.degToRad(270 - (item.viento_dir || 0))
-      : 0;
-    const windSize = 3 + Math.min(Math.max(item.viento_vel || 0, 0), 30) / 10;
-    const spriteSize = layer === 'wind' ? windSize : 5;
-    entry.sprite.scale.set(spriteSize, spriteSize, 1);
-    entry.sprite.visible = visible;
-  });
-
-  updateHeatmapTexture(hourDecimal, selectedDate);
 }
 
 const thermalCanvas = document.createElement('canvas');
