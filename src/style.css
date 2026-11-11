@@ -112,7 +112,7 @@ button.active {
 .map-label {
   color: #ffffff;
   font-family: system-ui, -apple-system, sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   padding: 3px 7px;
   background: rgba(15, 23, 42, 0.75);
@@ -124,4 +124,54 @@ button.active {
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   transition: opacity 0.3s ease;
+}
+
+/* Leyenda Estilo TV del Mapa Térmico */
+.thermal-legend {
+  margin-top: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend-title {
+  font-weight: bold;
+  font-size: 12px;
+  color: #38bdf8;
+}
+
+.legend-bar {
+  width: 14px;
+  height: 90px;
+  border-radius: 4px;
+  background: linear-gradient(to top,
+    #10b981 0%,   /* 8°C Verde */
+    #eab308 30%,  /* 18°C Amarillo */
+    #f97316 65%,  /* 30°C Naranja */
+    #ef4444 85%,  /* 38°C Rojo */
+    #7f1d1d 100%  /* 45°C Granate */
+  );
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.legend-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 90px;
+  font-size: 10px;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.data-note {
+  margin-top: 10px;
+  max-width: 290px;
+  color: #cbd5e1;
+  font-size: 0.7rem;
+  line-height: 1.4;
 }

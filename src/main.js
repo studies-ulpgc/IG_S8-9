@@ -9,7 +9,22 @@ import {
   initLabelRenderer,
   setupMunicipiosLabels,
   setupTerritoryLines,
-  toggleLabelsAndLines
+  toggleMunicipioLabels,
+  toggleMunicipioLines,
+  updateMunicipioLabelVisibility,
+  createAlignedHeightmapCanvas,
+  municipalityLinesReady,
+  thermalReady,
+  weatherTexturesReady,
+  TERRAIN_TEXTURE_WIDTH,
+  TERRAIN_TEXTURE_HEIGHT,
+  TERRAIN_WIDTH,
+  TERRAIN_HEIGHT,
+  TERRAIN_TEXTURE_REPEAT,
+  TERRAIN_TEXTURE_OFFSET,
+  getTerrainSurfaceHeight,
+  terrainCenter,
+  thermalTexture
 } from './api.js';
 
 // 1. Escena, Cámara y Renderizador
@@ -27,6 +42,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
+const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
 
 // INICIALIZAR RENDERIZADOR DE ETIQUETAS (CSS2D - Fase 2)
 const labelRenderer = initLabelRenderer(document.body);
@@ -35,11 +51,23 @@ const labelRenderer = initLabelRenderer(document.body);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.minDistance = 15;
-controls.maxDistance = 140;
+controls.minDistance = 8;
+controls.maxDistance = 180;
 controls.maxPolarAngle = Math.PI / 2.05;
+controls.target.copy(terrainCenter);
 
-camera.position.set(0, 180, 200);
+camera.position.copy(controls.target).add(new THREE.Vector3(0, 180, 200));
+let activeCamera = camera;
+const orthographicFrustumHeight = 110;
+const camera2D = new THREE.OrthographicCamera(
+  -orthographicFrustumHeight * camera.aspect / 2,
+  orthographicFrustumHeight * camera.aspect / 2,
+  orthographicFrustumHeight / 2,
+  -orthographicFrustumHeight / 2,
+  0.1,
+  1000
+);
+camera2D.up.set(0, 0, -1);
 
 // 2. Iluminación
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
@@ -52,19 +80,69 @@ scene.add(dirLight);
 // 3. Terreno 3D
 const textureLoader = new THREE.TextureLoader();
 const texture = textureLoader.load(textureImg);
-const heightmap = textureLoader.load(heightmapImg);
+let terrain;
+let resolveTerrainReady;
+let rejectTerrainReady;
+const terrainReady = new Promise((resolve, reject) => {
+  resolveTerrainReady = resolve;
+  rejectTerrainReady = reject;
+});
+const heightmap = textureLoader.load(heightmapImg, (loadedHeightmap) => {
+  try {
+    const source = loadedHeightmap.image;
+    const heightCanvas = createAlignedHeightmapCanvas(
+      source,
+      TERRAIN_TEXTURE_WIDTH,
+      TERRAIN_TEXTURE_HEIGHT
+    );
+    const heightContext = heightCanvas.getContext('2d');
+    const heightPixels = heightContext.getImageData(0, 0, heightCanvas.width, heightCanvas.height).data;
+    const positions = terrain.geometry.attributes.position;
+    const uvAttribute = terrain.geometry.attributes.uv;
+    const sampleUv = new THREE.Vector2();
 
-const zoomFactorX = 0.6; 
-const zoomFactorY = 0.6;
+    for (let i = 0; i < positions.count; i++) {
+      sampleUv.set(uvAttribute.getX(i), uvAttribute.getY(i));
+      loadedHeightmap.transformUv(sampleUv);
+      const sourceX = sampleUv.x * (heightCanvas.width - 1);
+      const sourceY = sampleUv.y * (heightCanvas.height - 1);
+      const x0 = Math.floor(sourceX);
+      const y0 = Math.floor(sourceY);
+      const x1 = Math.min(x0 + 1, heightCanvas.width - 1);
+      const y1 = Math.min(y0 + 1, heightCanvas.height - 1);
+      const xBlend = sourceX - x0;
+      const yBlend = sourceY - y0;
+      const topLeft = heightPixels[(y0 * heightCanvas.width + x0) * 4];
+      const topRight = heightPixels[(y0 * heightCanvas.width + x1) * 4];
+      const bottomLeft = heightPixels[(y1 * heightCanvas.width + x0) * 4];
+      const bottomRight = heightPixels[(y1 * heightCanvas.width + x1) * 4];
+      const top = THREE.MathUtils.lerp(topLeft, topRight, xBlend);
+      const bottom = THREE.MathUtils.lerp(bottomLeft, bottomRight, xBlend);
+      const elevation = THREE.MathUtils.lerp(top, bottom, yBlend) / 255;
+      positions.setZ(i, elevation * material.displacementScale + material.displacementBias);
+    }
+
+    positions.needsUpdate = true;
+    terrain.geometry.computeVertexNormals();
+    terrain.geometry.computeBoundingSphere();
+    material.displacementMap = null;
+    material.needsUpdate = true;
+    resolveTerrainReady();
+  } catch (error) {
+    rejectTerrainReady(error);
+  }
+}, undefined, rejectTerrainReady);
+
+const zoomFactorX = TERRAIN_TEXTURE_REPEAT;
+const zoomFactorY = TERRAIN_TEXTURE_REPEAT;
 
 [texture, heightmap].forEach((tex) => {
   tex.repeat.set(zoomFactorX, zoomFactorY);
-  tex.offset.set((1 - zoomFactorX) / 2, (1 - zoomFactorY) / 2); 
+  tex.offset.set(TERRAIN_TEXTURE_OFFSET, TERRAIN_TEXTURE_OFFSET);
 });
 
-const PLANE_WIDTH = 180;
-const PLANE_HEIGHT = 108; 
-const geometry = new THREE.PlaneGeometry(PLANE_WIDTH, PLANE_HEIGHT, 256, 256);
+const PLANE_WIDTH = TERRAIN_WIDTH;
+const PLANE_HEIGHT = TERRAIN_HEIGHT;
 
 const material = new THREE.MeshStandardMaterial({
   map: texture,
@@ -74,26 +152,28 @@ const material = new THREE.MeshStandardMaterial({
   roughness: 0.8
 });
 
-const terrain = new THREE.Mesh(geometry, material);
+terrain = new THREE.Mesh(
+  new THREE.PlaneGeometry(PLANE_WIDTH, PLANE_HEIGHT, 256, 256),
+  material
+);
 terrain.rotation.x = -Math.PI / 2;
 scene.add(terrain);
 
-// 4. ANIMACIÓN DE ENTRADA
-let introAnim = true;
-let introProgress = 0;
-const startPos = new THREE.Vector3(0, 180, 200);
-const endPos = new THREE.Vector3(0, 60, 75);
+const textureFilters = [texture, heightmap];
+textureFilters.forEach(tex => {
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = maxAnisotropy;
+  tex.needsUpdate = true;
+});
 
-function updateIntroAnimation() {
-  if (!introAnim) return;
-  introProgress += 0.015;
-  if (introProgress >= 1) {
-    introProgress = 1;
-    introAnim = false;
-  }
-  const t = introProgress * introProgress * (3 - 2 * introProgress);
-  camera.position.lerpVectors(startPos, endPos, t);
-}
+thermalTexture.repeat.set(zoomFactorX, zoomFactorY);
+thermalTexture.offset.set(TERRAIN_TEXTURE_OFFSET, TERRAIN_TEXTURE_OFFSET);
+thermalTexture.anisotropy = maxAnisotropy;
+
+camera.position.copy(terrainCenter).add(new THREE.Vector3(0, 100, 140));
+camera.lookAt(terrainCenter);
 
 // 5. Controles UI y Timelapse
 const timeSlider = document.getElementById('time-slider');
@@ -107,15 +187,35 @@ const datePicker = document.getElementById('date-picker');
 let isPlaying = false;
 let playSpeed = 1;
 let lastFrameTime = performance.now();
+let currentHourValue = Number(timeSlider.value);
 let isLiveMode = false;
-let showLabels = true;
+let isSceneInitialized = false;
+let frameRequest = null;
+let labelsNeedOcclusionUpdate = true;
+let selectedLayer = 'weather';
+let showWeatherIcons = true;
+
+function requestRender() {
+  if (frameRequest === null) {
+    frameRequest = requestAnimationFrame(animate);
+  }
+}
+
+controls.addEventListener('change', () => {
+  labelsNeedOcclusionUpdate = true;
+  requestRender();
+});
 
 function setHour(hourDecimal) {
+  currentHourValue = hourDecimal;
   timeSlider.value = hourDecimal;
   const hours = Math.floor(hourDecimal);
   const minutes = Math.floor((hourDecimal % 1) * 60);
   timeDisplay.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-  updateSpritesForHour(scene, hourDecimal);
+  if (isSceneInitialized) {
+    updateSpritesForHour(scene, terrain, hourDecimal, selectedLayer, showWeatherIcons);
+  }
+  requestRender();
 }
 
 timeSlider.addEventListener('input', (e) => {
@@ -125,6 +225,8 @@ timeSlider.addEventListener('input', (e) => {
 btnPlay.addEventListener('click', () => {
   isPlaying = !isPlaying;
   btnPlay.textContent = isPlaying ? '⏸ Pausa' : '▶ Play';
+  lastFrameTime = performance.now();
+  requestRender();
 });
 
 const speeds = [1, 2, 4, 8];
@@ -135,76 +237,170 @@ btnSpeed.addEventListener('click', () => {
   btnSpeed.textContent = `Vel: x${playSpeed}`;
 });
 
-btnDataSource.addEventListener('click', async () => {
-  isLiveMode = !isLiveMode;
+async function setLiveMode(enabled) {
+  if (isLiveMode === enabled) return;
+  isLiveMode = enabled;
   if (isLiveMode) {
+    datePicker.value = formatLocalDate(new Date());
     btnDataSource.textContent = 'Modo: LIVE (Tiempo Real)';
     timelapseControls.style.display = 'none';
     isPlaying = false;
     btnPlay.textContent = '▶ Play';
-    await fetchLiveWeatherData();
-    const currentHour = new Date().getHours();
-    setHour(currentHour);
+    try {
+      await fetchLiveWeatherData();
+      setHour(new Date().getHours());
+    } catch (error) {
+      console.error('No se pudo activar el modo LIVE:', error);
+      isLiveMode = false;
+      btnDataSource.textContent = 'Modo: HISTÓRICO (CSV)';
+      timelapseControls.style.display = 'block';
+    }
   } else {
     btnDataSource.textContent = 'Modo: HISTÓRICO (CSV)';
     timelapseControls.style.display = 'block';
-    await loadWeatherData();
-    setHour(parseFloat(timeSlider.value));
+    try {
+      await loadWeatherData();
+      setHour(parseFloat(timeSlider.value));
+    } catch (error) {
+      console.error('No se pudo volver al modo histórico:', error);
+      isLiveMode = true;
+      btnDataSource.textContent = 'Modo: LIVE (Tiempo Real)';
+      timelapseControls.style.display = 'none';
+    }
+  }
+  requestRender();
+}
+
+btnDataSource.addEventListener('click', () => setLiveMode(!isLiveMode));
+document.getElementById('btn-today').addEventListener('click', () => setLiveMode(true));
+datePicker.addEventListener('change', () => {
+  if (datePicker.value === formatLocalDate(new Date())) {
+    setLiveMode(true);
   }
 });
 
-// Botón Toggle para Etiquetas y Líneas (Fase 2)
+const btnWeatherLayer = document.getElementById('btn-layer-weather');
+const btnWindLayer = document.getElementById('btn-layer-wind');
+function selectLayer(layer) {
+  selectedLayer = layer;
+  btnWeatherLayer.classList.toggle('active', layer === 'weather');
+  btnWindLayer.classList.toggle('active', layer === 'wind');
+  if (isSceneInitialized) {
+    updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons);
+  }
+  requestRender();
+}
+btnWeatherLayer.addEventListener('click', () => selectLayer('weather'));
+btnWindLayer.addEventListener('click', () => selectLayer('wind'));
+const btnIcons = document.getElementById('btn-icons');
+btnIcons.addEventListener('click', () => {
+  showWeatherIcons = !showWeatherIcons;
+  btnIcons.classList.toggle('active', showWeatherIcons);
+  if (isSceneInitialized) {
+    updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons);
+  }
+  requestRender();
+});
+
+// Visibilidad independiente de nombres y límites municipales
 const btnLabels = document.getElementById('btn-labels');
+let showLabels = false;
 btnLabels.addEventListener('click', () => {
   showLabels = !showLabels;
   btnLabels.classList.toggle('active', showLabels);
-  toggleLabelsAndLines(showLabels);
+  toggleMunicipioLabels(showLabels);
+  requestRender();
 });
 
-// Botón Térmico y 2D/3D
-let isThermal = false;
+const btnLines = document.getElementById('btn-lines');
+let showLines = false;
+btnLines.addEventListener('click', () => {
+  showLines = !showLines;
+  btnLines.classList.toggle('active', showLines);
+  toggleMunicipioLines(showLines);
+  requestRender();
+});
+
+const btnThermal = document.getElementById('btn-thermal');
+const legendUI = document.getElementById('thermal-legend');
+
+btnThermal.addEventListener('click', () => {
+  const isThermalActive = !btnThermal.classList.contains('active');
+  btnThermal.classList.toggle('active', isThermalActive);
+  if (legendUI) legendUI.style.display = isThermalActive ? 'flex' : 'none';
+  if (isThermalActive) {
+    if (isSceneInitialized) {
+      updateSpritesForHour(scene, terrain, currentHourValue, selectedLayer, showWeatherIcons);
+    }
+    material.map = thermalTexture;
+  } else {
+    material.map = texture;
+  }
+  material.needsUpdate = true;
+  requestRender();
+});
+
 let is2D = false;
 
-document.getElementById('btn-thermal').addEventListener('click', () => {
-  isThermal = !isThermal;
-  material.color.setHex(isThermal ? 0xff7744 : 0xffffff);
-});
-
-document.getElementById('btn-mode').addEventListener('click', () => {
+document.getElementById('btn-mode').addEventListener('click', (event) => {
   is2D = !is2D;
   if (is2D) {
-    camera.position.set(0, 120, 0.01);
-    controls.maxPolarAngle = 0;
+    camera2D.position.copy(controls.target).add(new THREE.Vector3(0, 120, 0));
+    camera2D.lookAt(controls.target);
+    controls.object = camera2D;
+    controls.enableRotate = false;
+    controls.minZoom = 0.75;
+    controls.maxZoom = 8;
+    activeCamera = camera2D;
   } else {
-    camera.position.set(0, 60, 75);
+    controls.object = camera;
+    camera.position.copy(controls.target).add(new THREE.Vector3(0, 60, 75));
+    camera.lookAt(controls.target);
+    controls.enableRotate = true;
     controls.maxPolarAngle = Math.PI / 2.05;
+    activeCamera = camera;
   }
-  controls.target.set(0, 0, 0);
+  event.currentTarget.classList.toggle('active', is2D);
   controls.update();
+  labelsNeedOcclusionUpdate = true;
+  requestRender();
 });
 
 // 6. Loop Principal
 function animate(now) {
-  requestAnimationFrame(animate);
+  frameRequest = null;
   const delta = (now - lastFrameTime) / 1000;
   lastFrameTime = now;
 
-  updateIntroAnimation();
   controls.update();
+  if (isSceneInitialized && !is2D) {
+    const terrainClearance = 2;
+    const terrainHeight = getTerrainSurfaceHeight(
+      terrain,
+      activeCamera.position.x,
+      activeCamera.position.z
+    );
+    if (activeCamera.position.y < terrainHeight + terrainClearance) {
+      activeCamera.position.y = terrainHeight + terrainClearance;
+      activeCamera.lookAt(controls.target);
+    }
+  }
 
   if (!isLiveMode && isPlaying) {
-    let currentHour = parseFloat(timeSlider.value);
+    let currentHour = currentHourValue;
     currentHour += (delta * playSpeed) / 5; 
 
     if (currentHour >= 24) {
-      currentHour = 0;
-      const currentDate = new Date(datePicker.value);
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = formatLocalDate(new Date());
 
       if (datePicker.value !== todayStr) {
+        const [year, month, day] = datePicker.value.split('-').map(Number);
+        const currentDate = new Date(year, month - 1, day);
         currentDate.setDate(currentDate.getDate() + 1);
-        datePicker.value = currentDate.toISOString().split('T')[0];
+        datePicker.value = formatLocalDate(currentDate);
+        currentHour = 0;
       } else {
+        currentHour = 23.99;
         isPlaying = false;
         btnPlay.textContent = '▶ Play';
       }
@@ -212,31 +408,56 @@ function animate(now) {
     setHour(currentHour);
   }
 
-  // Renderizar la escena 3D y las etiquetas 2D
-  renderer.render(scene, camera);
-  labelRenderer.render(scene, camera);
+  if (labelsNeedOcclusionUpdate && isSceneInitialized) {
+    updateMunicipioLabelVisibility(activeCamera, terrain);
+    labelsNeedOcclusionUpdate = false;
+  }
+  renderer.render(scene, activeCamera);
+  labelRenderer.render(scene, activeCamera);
+  if (!isLiveMode && isPlaying) requestRender();
 }
 
 // Inicialización completa
-loadWeatherData().then(() => {
-  setupMunicipiosLabels(scene);
-  setupTerritoryLines(scene);
+Promise.all([
+  loadWeatherData(),
+  terrainReady,
+  municipalityLinesReady,
+  thermalReady,
+  weatherTexturesReady
+]).then(() => {
+  setupMunicipiosLabels(scene, terrain);
+  setupTerritoryLines(scene, terrain);
+  toggleMunicipioLabels(showLabels);
+  toggleMunicipioLines(showLines);
+  btnLabels.classList.toggle('active', showLabels);
+  btnLines.classList.toggle('active', showLines);
+  isSceneInitialized = true;
   setHour(12);
+  controls.enabled = true;
   lastFrameTime = performance.now();
-  animate(lastFrameTime);
+  requestRender();
+}).catch(error => {
+  console.error('No se pudo iniciar el visor del terreno:', error);
 });
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  const aspect = window.innerWidth / window.innerHeight;
+  camera2D.left = -orthographicFrustumHeight * aspect / 2;
+  camera2D.right = orthographicFrustumHeight * aspect / 2;
+  camera2D.top = orthographicFrustumHeight / 2;
+  camera2D.bottom = -orthographicFrustumHeight / 2;
+  camera2D.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  labelsNeedOcclusionUpdate = true;
+  requestRender();
 });
 
-//Hacer fase 4
-// Que als etiquetas no se vean detrás de las montañas
-//Que los iconos estén un poco encima del relieve
-//Modo 2d
-//Poder acercar y que se vea nítido, y separar enf rnajas los municipios
-//Animación inicial
-//Poder acercarse y ver más detalles de la zona si te acercas, y que se vea nítido
+function formatLocalDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
