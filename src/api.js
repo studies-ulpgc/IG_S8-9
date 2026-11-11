@@ -135,9 +135,14 @@ export function getTerrainSurfaceHeight(terrain, worldX, worldZ) {
   return terrain.position.y + localHeight;
 }
 
-export function updateMunicipioLabelVisibility(camera, terrain) {
+// api.js
+export function updateMunicipioLabelVisibility(camera, terrain, showLabels = true) {
+  if (!showLabels) return; // 👈 Si están desactivadas, no recalcular oclusión ni cambiar estilo
+  
   const cameraPosition = camera.getWorldPosition(new THREE.Vector3());
   activeLabels.forEach(label => {
+    if (label.element.style.display === 'none') return;
+    
     const labelPosition = label.getWorldPosition(new THREE.Vector3());
     const distance = cameraPosition.distanceTo(labelPosition);
     const steps = Math.min(64, Math.max(12, Math.ceil(distance / 2)));
@@ -251,7 +256,9 @@ export function setupTerritoryLines(scene, terrain) {
 export function toggleMunicipioLabels(visible) {
   activeLabels.forEach(l => {
     if (l.element) {
+      // Usamos tanto display como opacidad/pointer-events para asegurar que se oculte totalmente
       l.element.style.display = visible ? 'block' : 'none';
+      l.element.style.visibility = visible ? 'visible' : 'hidden';
     }
   });
 }

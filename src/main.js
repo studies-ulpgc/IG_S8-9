@@ -471,7 +471,7 @@ function animate(now) {
     }
   }
   if (labelsNeedOcclusionUpdate && isSceneInitialized) {
-    updateMunicipioLabelVisibility(activeCamera, terrain);
+    updateMunicipioLabelVisibility(activeCamera, terrain, showLabels);
     labelsNeedOcclusionUpdate = false;
   }
   renderer.render(scene, activeCamera);
