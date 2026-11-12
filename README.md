@@ -145,7 +145,7 @@ Al activar la visualización de viento, se sustituyen los iconos estáticos ([`s
 
 Correspondencia técnica entre los ejemplos de clase ([`otsedom`](https://github.com/otsedom)) y su implementación en el proyecto:
 
-- **Entorno CodeSandbox del Proyecto:** [Probar Proyecto en Sandbox](https://codesandbox.io/p/sandbox/github/studies-ulpgc/IG_S8-9)
+- **Entorno CodeSandbox del Proyecto:** [Probar Proyecto en Sandbox](https://codesandbox.io/p/sandbox/elegant-black-762ynk?file=%2Fsrc%2Fapi.js)
 - **CodeSandbox Semana 8 (Terrenos y Mapas):** [ig-s8-49qnzw](https://codesandbox.io/p/sandbox/ig-s8-49qnzw)
 
 | Script de Referencia | Concepto Evaluado | Aplicación en este Proyecto |
