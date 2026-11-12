@@ -30,10 +30,6 @@
 2. [Demostración en Vídeo](#2-demostración-en-vídeo)
 3. [Características Principales](#3-características-principales)
 4. [Análisis Técnico y Arquitectura de Capas](#4-análisis-técnico-y-arquitectura-de-capas)
-   - [4.1. Generación del Terreno 3D](#41-generación-del-terreno-3d)
-   - [4.2. Capa Térmica Dinámica (Interpolación IDW)](#42-capa-térmica-dinámica-interpolación-idw)
-   - [4.3. Capa Vectorial de Viento](#43-capa-vectorial-de-viento)
-   - [4.4. Oclusión de Nombres y Proyección Geoespacial](#44-oclusión-de-nombres-y-proyección-geoespacial)
 5. [Estructura del Código y Comparativa Académica](#5-estructura-del-código-y-comparativa-académica)
 6. [Fuentes de Datos y Bibliografía](#6-fuentes-de-datos-y-bibliografía)
 
@@ -169,7 +165,21 @@ Correspondencia técnica entre los ejemplos de clase ([`otsedom`](https://github
 
 ---
 
-### 6.1. Autora y Colaboradores
+### 6.1. Declaración de Asistencia con Herramientas de Inteligencia Artificial
+
+Durante el desarrollo del proyecto se empleó **Google Gemini** como herramienta de apoyo técnico, planificación y documentación:
+
+- **Recomendación de API y estructura de datos:** Selección de la API abierta de [Open-Meteo](https://open-meteo.com/) frente a alternativas con clave de pago, y comprensión de sus parámetros horarios (`hourly`) y códigos meteorológicos WMO.
+- **Cálculos geoespaciales y calibración de malla:** Apoyo en las fórmulas de proyección de coordenadas $(\text{Lat}, \text{Lon})$ al plano 3D, interpolación térmica inversa a la distancia (IDW) y ajuste de coordenadas UV para alinear el mapa de alturas con la textura satelital.
+- **Depuración y resolución de errores:** Revisión de fallos de sincronización en la carga asíncrona de texturas, filtrado de valores nulos en el histórico CSV y oclusión de etiquetas HTML mediante trazado de rayos.
+- **Planificación y documentación:** Organización modular del código (`main.js`, `api.js`, `geoutils.js`), distribución de tareas por hitos y estructuración técnica del presente documento `README.md`.
+
+**Ejemplo de conversación de soporte técnico:**
+- [Consulta sobre alineación de relieve UV y recomendación de API meteorológica](https://gemini.google.com/app/144c63cd03b894ed)
+
+---
+
+### 6.2. Autora y Colaboradores
 
 <div align="center">
 
