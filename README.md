@@ -175,7 +175,7 @@ Durante el desarrollo del proyecto se empleó **Google Gemini** como herramienta
 - **Planificación y documentación:** Organización modular del código (`main.js`, `api.js`, `geoutils.js`), distribución de tareas por hitos y estructuración técnica del presente documento `README.md`.
 
 **Ejemplo de conversación de soporte técnico:**
-- [Consulta sobre alineación de relieve UV y recomendación de API meteorológica](https://gemini.google.com/app/144c63cd03b894ed)
+- [Consulta sobre alineación de relieve](https://gemini.google.com/app/144c63cd03b894ed)
 
 ---
 
